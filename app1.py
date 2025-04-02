@@ -6,7 +6,7 @@ import re
 st.set_page_config(page_title="CAPNOW DATA CLEANER APP", layout="wide")
 st.title("CAPNOW DATA CLEANER APP")
 st.markdown("### Creator: Jaco Simkin - Director of Data Analysis  \n*alber es marico*")
-st.markdown("*For use with small business financial services CSVs.*")
+st.markdown("*For use with small business financial services CSVs only — not intended for retail or unrelated formats.*")
 
 # -------------------- STANDARDIZATION --------------------
 FINAL_COLUMNS = [
@@ -53,19 +53,24 @@ def process_csv(uploaded_file):
     all_original_columns = set(df.columns)
     original_col_count = len(all_original_columns)
 
+    # Ensure missing columns exist as empty Series
+    for col in ["First Name", "Last Name", "Address", "City", "State", "Zip", "Owner Address", "Owner City", "Owner State", "Owner Zip", "Email A", "Email B"]:
+        if col not in df.columns:
+            df[col] = ""
+
     # Full Name logic
     if "Full Name" not in df.columns:
-        df["Full Name"] = df.get("First Name", "") + " " + df.get("Last Name", "")
+        df["Full Name"] = df["First Name"].fillna("") + " " + df["Last Name"].fillna("")
     df["Full Name"] = df["Full Name"].apply(clean_text)
 
     # Business Address
     df["Business Address"] = (
-        df.get("Address", "").fillna("") + ", " + df.get("City", "").fillna("") + ", " + df.get("State", "").fillna("") + " " + df.get("Zip", "").fillna("")
+        df["Address"].fillna("") + ", " + df["City"].fillna("") + ", " + df["State"].fillna("") + " " + df["Zip"].fillna("")
     )
 
     # Home Address
     df["Home Address"] = (
-        df.get("Owner Address", "").fillna("") + ", " + df.get("Owner City", "").fillna("") + ", " + df.get("Owner State", "").fillna("") + " " + df.get("Owner Zip", "").fillna("")
+        df["Owner Address"].fillna("") + ", " + df["Owner City"].fillna("") + ", " + df["Owner State"].fillna("") + " " + df["Owner Zip"].fillna("")
     )
 
     # Phone logic — only keep first 2 valid phones
@@ -75,8 +80,8 @@ def process_csv(uploaded_file):
     df["Phone 2"] = [next((p for p in row[1:] if p), "") for row in phones_extracted]
 
     # Email logic
-    df["Email 1"] = df.get("Email A", "").fillna("").astype(str)
-    df["Email 2"] = df.get("Email B", "").fillna("").astype(str)
+    df["Email 1"] = df["Email A"].fillna("").astype(str)
+    df["Email 2"] = df["Email B"].fillna("").astype(str)
 
     # Combine & clean final columns
     cleaned = pd.DataFrame()
@@ -86,7 +91,7 @@ def process_csv(uploaded_file):
         else:
             cleaned[col] = ""
 
-    # Remove components after use
+    # Remove address components
     drop_cols = {"First Name", "Last Name", "Address", "City", "State", "Zip", "Owner Address", "Owner City", "Owner State", "Owner Zip"}
     df.drop(columns=[c for c in drop_cols if c in df.columns], inplace=True)
 
