@@ -40,27 +40,31 @@ def format_phone(phone):
 def clean_text(val):
     return re.sub(r"\s+", " ", str(val)).strip() if pd.notna(val) else ""
 
+# Helper to get a column or empty string
+def get_series(df, col_name):
+    return df[col_name].fillna("") if col_name in df.columns else ""
+
 # Main Cleaner Function
 def process_csv(uploaded_file):
     df = pd.read_csv(uploaded_file)
     df.rename(columns=lambda c: standardize_column(c), inplace=True)
 
-    # Full Name if missing
+    # Full Name
     if "Full Name" not in df.columns:
         df["Full Name"] = df.get("First Name", "").fillna("") + " " + df.get("Last Name", "").fillna("")
 
     # Build Business and Home Address
     df["Business Address"] = (
-        df.get("Address", "").fillna("") + ", " +
-        df.get("City", "").fillna("") + ", " +
-        df.get("State", "").fillna("") + " " +
-        df.get("Zip", "").fillna("")
+        get_series(df, "Address") + ", " +
+        get_series(df, "City") + ", " +
+        get_series(df, "State") + " " +
+        get_series(df, "Zip")
     )
     df["Home Address"] = (
-        df.get("Owner Address", "").fillna("") + ", " +
-        df.get("Owner City", "").fillna("") + ", " +
-        df.get("Owner State", "").fillna("") + " " +
-        df.get("Owner Zip", "").fillna("")
+        get_series(df, "Owner Address") + ", " +
+        get_series(df, "Owner City") + ", " +
+        get_series(df, "Owner State") + " " +
+        get_series(df, "Owner Zip")
     )
 
     # Phone Numbers
@@ -98,7 +102,7 @@ if uploaded_file:
     cleaned_df = process_csv(uploaded_file)
     st.success("✅ Data cleaned successfully!")
 
-    # Show full cleaned table like a spreadsheet
+    # Show full cleaned table
     st.dataframe(cleaned_df, use_container_width=True, height=600)
 
     st.download_button(
