@@ -25,44 +25,47 @@ COLUMN_MAPPING = {
     "owner address": "Owner Address", "owner city": "Owner City", "owner state": "Owner State", "owner zip": "Owner Zip"
 }
 
-# Standardize column names
 def standardize_column(col):
     return COLUMN_MAPPING.get(col.strip().lower(), col.strip())
 
-# Format phone number like (123) 456-7890
 def format_phone(phone):
     digits = re.sub(r"\D", "", str(phone))
     if len(digits) == 10:
         return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
     return phone
 
-# Clean general text
 def clean_text(val):
     return re.sub(r"\s+", " ", str(val)).strip() if pd.notna(val) else ""
 
-# Return Series safely, filled with empty string if not present
-def safe_get(df, column_name):
-    if column_name in df.columns:
-        return df[column_name].astype(str).fillna("")
-    else:
-        return pd.Series([""] * len(df))
-
-# Main cleaner function
 def process_csv(uploaded_file):
     df = pd.read_csv(uploaded_file)
     df.rename(columns=lambda c: standardize_column(c), inplace=True)
 
-    # Full Name
+    # Full name
     if "Full Name" not in df.columns:
-        df["Full Name"] = safe_get(df, "First Name") + " " + safe_get(df, "Last Name")
+        df["Full Name"] = df.get("First Name", pd.Series([""]*len(df))) + " " + df.get("Last Name", pd.Series([""]*len(df)))
 
     # Business Address
-    df["Business Address"] = safe_get(df, "Address") + ", " + safe_get(df, "City") + ", " + safe_get(df, "State") + " " + safe_get(df, "Zip")
+    df["Business Address"] = (
+        df.get("Address", pd.Series([""])) + ", " +
+        df.get("City", pd.Series([""])) + ", " +
+        df.get("State", pd.Series([""])) + " " +
+        df.get("Zip", pd.Series([""]))
+    )
 
     # Home Address
-    df["Home Address"] = safe_get(df, "Owner Address") + ", " + safe_get(df, "Owner City") + ", " + safe_get(df, "Owner State") + " " + safe_get(df, "Owner Zip")
+    df["Home Address"] = (
+        df.get("Owner Address", pd.Series([""])) + ", " +
+        df.get("Owner City", pd.Series([""])) + ", " +
+        df.get("Owner State", pd.Series([""])) + " " +
+        df.get("Owner Zip", pd.Series([""]))
+    )
 
-    # Phone cleaning
+    # If Home Address is empty and Business Address is filled, use that
+    df["Home Address"] = df["Home Address"].replace(", ,  ", "", regex=False)
+    df["Home Address"] = df["Home Address"].where(df["Home Address"].str.strip() != "", df["Business Address"])
+
+    # Phone numbers
     phone_cols = [col for col in df.columns if col.lower().startswith("phone")]
     df["Phone 1"] = ""
     df["Phone 2"] = ""
@@ -75,19 +78,18 @@ def process_csv(uploaded_file):
         for j in range(min(len(phones), 3)):
             df.at[i, f"Phone {j+1}"] = phones[j]
 
-    # Emails (safe)
-    df["Email 1"] = safe_get(df, "Email A")
-    df["Email 2"] = safe_get(df, "Email B")
+    # Email
+    df["Email 1"] = df.get("Email A", pd.Series([""]))
+    df["Email 2"] = df.get("Email B", pd.Series([""]))
 
-    # Final cleaned output
+    # Final structure
     cleaned = pd.DataFrame(columns=FINAL_COLUMNS)
     for col in FINAL_COLUMNS:
         cleaned[col] = df[col].apply(clean_text) if col in df.columns else ""
 
     return cleaned
 
-# ------------- Streamlit App ----------------
-
+# Streamlit app
 st.title("HUB Lead Cleaner")
 st.write("Upload a messy provider CSV → Download a cleaned version ready for the HUB")
 
@@ -101,9 +103,9 @@ if uploaded_file:
 
         st.download_button(
             label="Download Cleaned CSV",
-            data=cleaned_df.to_csv(index=False).encode("utf-8"),
+            data=cleaned_df.to_csv(index=False).encode('utf-8'),
             file_name="hub_cleaned.csv",
             mime="text/csv"
         )
     except Exception as e:
-        st.error(f"Something went wrong while cleaning the file.\n\nError: {e}")
+        st.error(f"⚠️ Something went wrong:\n\n{e}")
