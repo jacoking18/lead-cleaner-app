@@ -2,19 +2,16 @@ import streamlit as st
 import pandas as pd
 import re
 
-# ---------- CONFIG ---------- #
 st.set_page_config(layout="wide")
 st.title("CAPNOW DATA CLEANER APP")
 st.caption("Creator: Jacoking | alber es marico")
 
-# HUB Final Columns
 FINAL_COLUMNS = [
     "Business Name", "Full Name", "SSN", "DOB", "Industry", "EIN",
     "Business Start Date", "Phone 1", "Phone 2", "Email 1", "Email 2",
     "Business Address", "Home Address", "Monthly Revenue"
 ]
 
-# Known Variations Mapping
 COLUMN_MAPPING = {
     "ssn": "SSN", "social security": "SSN", "social": "SSN",
     "dob": "DOB", "birth date": "DOB", "dateofbirth": "DOB",
@@ -30,7 +27,6 @@ COLUMN_MAPPING = {
     "industry": "Industry"
 }
 
-# --------- Functions --------- #
 def normalize_col(col):
     return re.sub(r"\s+", " ", re.sub(r"[^a-zA-Z0-9 ]", "", col)).strip().lower()
 
@@ -47,68 +43,67 @@ def clean_text(val):
         return ""
     return re.sub(r"\s+", " ", str(val)).replace(",", "").strip()
 
+def safe_col(df, col):
+    return df[col] if col in df else pd.Series([""] * len(df))
+
 def process_csv(uploaded_file):
     df = pd.read_csv(uploaded_file)
     original_cols = list(df.columns)
 
-    # Standardize column names
     df.rename(columns=lambda c: standardize_column(c), inplace=True)
 
-    # Handle Full Name
+    # Full Name
     if "Full Name" not in df.columns:
-        df["Full Name"] = df.get("First Name", "").astype(str).fillna("") + " " + df.get("Last Name", "").astype(str).fillna("")
+        df["Full Name"] = safe_col(df, "First Name") + " " + safe_col(df, "Last Name")
 
     # Business Address
     df["Business Address"] = (
-        df.get("Address", "").astype(str).fillna("") + " " +
-        df.get("City", "").astype(str).fillna("") + " " +
-        df.get("State", "").astype(str).fillna("") + " " +
-        df.get("Zip", "").astype(str).fillna("")
+        safe_col(df, "Address") + " " +
+        safe_col(df, "City") + " " +
+        safe_col(df, "State") + " " +
+        safe_col(df, "Zip")
     ).str.replace(",", "").str.replace("  ", " ")
 
     # Home Address
     df["Home Address"] = (
-        df.get("Owner Address", "").astype(str).fillna("") + " " +
-        df.get("Owner City", "").astype(str).fillna("") + " " +
-        df.get("Owner State", "").astype(str).fillna("") + " " +
-        df.get("Owner Zip", "").astype(str).fillna("")
+        safe_col(df, "Owner Address") + " " +
+        safe_col(df, "Owner City") + " " +
+        safe_col(df, "Owner State") + " " +
+        safe_col(df, "Owner Zip")
     ).str.replace(",", "").str.replace("  ", " ")
 
-    # Phones
+    # Phone logic
     phone_cols = [col for col in df.columns if "phone" in col.lower()]
-    phones = df[phone_cols].applymap(format_phone).values.tolist()
+    phones = df[phone_cols].applymap(format_phone).values.tolist() if phone_cols else [[]] * len(df)
     df["Phone 1"], df["Phone 2"] = zip(*[(p[0], p[1] if len(p) > 1 else "") for p in [list(dict.fromkeys(row)) for row in phones]])
 
     # Emails
-    df["Email 1"] = df.get("Email", "").astype(str).fillna("")
+    df["Email 1"] = safe_col(df, "Email")
     df["Email 2"] = ""
 
-    # Final Clean DataFrame
+    # Final cleaned
     cleaned = pd.DataFrame()
     for col in FINAL_COLUMNS:
         cleaned[col] = df[col].apply(clean_text) if col in df.columns else ""
 
-    # Add untouched columns (unrecognized ones)
-    known_cols = set(FINAL_COLUMNS)
-    recognized_cols = {standardize_column(c) for c in original_cols}
-    untouched_cols = [col for col in df.columns if col not in known_cols and standardize_column(col) not in recognized_cols]
-
-    untouched_df = df[untouched_cols].copy()
-    untouched_df.columns = [f"❌ {col}" for col in untouched_cols]  # Mark in red (Streamlit doesn't support cell color natively)
+    # Unrecognized columns
+    recognized_set = set(standardize_column(c) for c in original_cols)
+    unrecognized = [col for col in df.columns if col not in FINAL_COLUMNS and standardize_column(col) not in recognized_set]
+    untouched_df = df[unrecognized].copy()
+    untouched_df.columns = [f"❌ {col}" for col in untouched_df.columns]
 
     final_df = pd.concat([cleaned, untouched_df], axis=1)
 
     summary = {
         "✅ Cleaned Columns": FINAL_COLUMNS,
-        "❌ Unrecognized Columns": untouched_cols,
+        "❌ Unrecognized Columns": unrecognized,
         "📦 Total Columns": len(final_df.columns),
         "📈 Total Rows": len(final_df)
     }
 
     return final_df, summary
 
-# ---------- Streamlit UI ---------- #
-
+# -------------------- UI --------------------
 uploaded_file = st.file_uploader("Upload a CSV file", type="csv")
 
 if uploaded_file:
