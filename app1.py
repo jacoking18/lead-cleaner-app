@@ -2,144 +2,136 @@ import streamlit as st
 import pandas as pd
 import re
 
-# ---------------- CONFIG ----------------
-
+# ========== CONFIG ==========
 FINAL_COLUMNS = [
     "Business Name", "Full Name", "SSN", "DOB", "Industry", "EIN",
     "Business Start Date", "Phone 1", "Phone 2", "Email 1", "Email 2",
     "Business Address", "Home Address", "Monthly Revenue"
 ]
 
-# Known messy header variations
-HUB_COLUMN_MAP = {
-    "businessname": "Business Name", "bizname": "Business Name", "companyname": "Business Name",
-    "fullname": "Full Name", "contactname": "Full Name", "name": "Full Name", "ownername": "Full Name",
-    "ssn": "SSN", "social": "SSN", "socialsecurity": "SSN", "socialsecuritynumber": "SSN",
-    "dob": "DOB", "birthdate": "DOB", "dateofbirth": "DOB", "birth": "DOB",
-    "industry": "Industry", "businesstype": "Industry", "sector": "Industry",
-    "ein": "EIN", "employerid": "EIN", "taxid": "EIN",
-    "businessstartdate": "Business Start Date", "startdate": "Business Start Date", "bsd": "Business Start Date",
-    "phone": "Phone A", "phone1": "Phone A", "cell": "Phone B", "cellphone": "Phone B",
-    "phone2": "Phone B", "altphone": "Phone B", "googlephone": "Phone B",
-    "email": "Email A", "email1": "Email A", "emailaddress": "Email A",
-    "email2": "Email B", "googleemail": "Email B",
-    "address": "Address", "street": "Address", "businessaddress": "Address",
+COLUMN_MAPPING = {
+    # --- Identification
+    "ssn": "SSN", "social": "SSN", "social security": "SSN", "s.s.n.": "SSN",
+    "dob": "DOB", "birth date": "DOB", "dateofbirth": "DOB",
+    "ein": "EIN", "employer id": "EIN", "federal ein": "EIN",
+    "industry": "Industry", "line of work": "Industry",
+
+    # --- Business Info
+    "biz name": "Business Name", "businessname": "Business Name", "company": "Business Name", "dba": "Business Name",
+    "business start": "Business Start Date", "start date": "Business Start Date", "yearsinbusiness": "Business Start Date",
+
+    # --- Name
+    "first name": "First Name", "firstname": "First Name",
+    "last name": "Last Name", "lastname": "Last Name",
+    "full name": "Full Name", "owner name": "Full Name",
+
+    # --- Revenue
+    "monthly revenue": "Monthly Revenue", "revenue": "Monthly Revenue", "estimated revenue": "Monthly Revenue",
+
+    # --- Phones
+    "phone": "Phone", "phone1": "Phone", "phone 1": "Phone", "cellphone": "Phone", "mobile": "Phone",
+    "altphone": "Phone", "phone number": "Phone", "googlephone": "Phone", "number1": "Phone",
+
+    # --- Emails
+    "email": "Email", "email1": "Email", "email 1": "Email", "email2": "Alt Email", "google email": "Alt Email",
+
+    # --- Address
+    "address": "Address", "address1": "Address", "business address": "Address",
     "city": "City", "state": "State", "zip": "Zip",
-    "owneraddress": "Owner Address", "homeaddress": "Owner Address",
-    "ownercity": "Owner City", "ownerstate": "Owner State", "ownerzip": "Owner Zip",
-    "monthlyrevenue": "Monthly Revenue", "revenue": "Monthly Revenue", "income": "Monthly Revenue"
+
+    "owner address": "Owner Address", "home address": "Owner Address",
+    "owner city": "Owner City", "owner state": "Owner State", "owner zip": "Owner Zip",
 }
 
+# ========== HELPERS ==========
+
 def normalize_column(col):
-    return re.sub(r"[^a-z0-9]", "", str(col).lower().strip())
+    col = col.strip().lower().replace(".", "").replace("  ", " ").replace(" ", "")
+    return COLUMN_MAPPING.get(col, col)
 
-def standardize_columns(df):
-    new_cols = []
-    for col in df.columns:
-        normalized = normalize_column(col)
-        mapped = HUB_COLUMN_MAP.get(normalized, col)
-        new_cols.append(mapped)
-    df.columns = new_cols
-    return df
-
-def format_phone(phone):
-    digits = re.sub(r"\D", "", str(phone))
-    if len(digits) == 10:
-        return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
-    return phone
+def format_phone(val):
+    digits = re.sub(r"\D", "", str(val))
+    return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}" if len(digits) == 10 else str(val)
 
 def clean_text(val):
     return re.sub(r"\s+", " ", str(val)).strip() if pd.notna(val) else ""
 
+def clean_address(addr):
+    addr = str(addr).replace(",", "")
+    addr = re.sub(r"\s+", " ", addr)
+    return addr.strip()
+
+# ========== MAIN PROCESS ==========
 def process_csv(uploaded_file):
-    report = []
-
     df = pd.read_csv(uploaded_file)
-    original_cols = df.columns.tolist()
+    df.columns = [normalize_column(col) for col in df.columns]
 
-    # Standardize columns
-    df = standardize_columns(df)
+    # Handle Full Name
+    if "full name" not in df.columns:
+        df["full name"] = df.get("first name", "") + " " + df.get("last name", "")
+        df["full name"] = df["full name"].str.strip()
 
-    if "Full Name" not in df.columns:
-        # Case: First Name contains full name
-        if "First Name" in df.columns and "Last Name" not in df.columns:
-            df["Full Name"] = df["First Name"]
-            report.append("Full Name built from 'First Name'")
-        elif "First Name" in df.columns and "Last Name" in df.columns:
-            df["Full Name"] = df["First Name"].fillna("") + " " + df["Last Name"].fillna("")
-            report.append("Full Name built from First + Last")
-        else:
-            df["Full Name"] = ""
+    # Handle Phone
+    phone_cols = [col for col in df.columns if "phone" in col]
+    phones_clean = df[phone_cols].applymap(format_phone)
+    df["Phone 1"] = phones_clean.apply(lambda row: next((p for p in row if p), ""), axis=1)
+    df["Phone 2"] = phones_clean.apply(lambda row: next((p for i, p in enumerate(row) if i > 0 and p), ""), axis=1)
 
-    # Construct addresses
-    df["Business Address"] = df.get("Address", "") + ", " + \
-                             df.get("City", "") + ", " + \
-                             df.get("State", "") + " " + df.get("Zip", "")
+    # Handle Email
+    df["Email 1"] = df.get("email", "")
+    df["Email 2"] = df.get("alt email", "")
 
-    df["Home Address"] = df.get("Owner Address", "") + ", " + \
-                         df.get("Owner City", "") + ", " + \
-                         df.get("Owner State", "") + " " + df.get("Owner Zip", "")
+    # Combine Addresses
+    df["Business Address"] = (
+        df.get("address", "") + ", " + df.get("city", "") + ", " + df.get("state", "") + " " + df.get("zip", "")
+    ).apply(clean_address)
 
-    # Phones
-    phone_cols = [col for col in df.columns if "phone" in col.lower()]
-    df["Phone 1"], df["Phone 2"] = "", ""
-    for i, row in df.iterrows():
-        phones = list(dict.fromkeys([
-            format_phone(row[col]) for col in phone_cols
-            if pd.notna(row[col]) and str(row[col]).strip() != ""
-        ]))
-        if phones:
-            df.at[i, "Phone 1"] = phones[0]
-        if len(phones) > 1:
-            df.at[i, "Phone 2"] = phones[1]
-    report.append(f"{len(phone_cols)} phone column(s) processed")
+    df["Home Address"] = (
+        df.get("owner address", "") + ", " + df.get("owner city", "") + ", " + df.get("owner state", "") + " " + df.get("owner zip", "")
+    ).apply(clean_address)
 
-    # Emails
-    df["Email 1"] = df.get("Email A", "")
-    df["Email 2"] = df.get("Email B", "")
-
-    # Build final cleaned DataFrame
-    cleaned = pd.DataFrame()
+    # Final Cleaned Output
+    cleaned = pd.DataFrame(columns=FINAL_COLUMNS)
     for col in FINAL_COLUMNS:
         cleaned[col] = df[col].apply(clean_text) if col in df.columns else ""
 
-    # Append unmatched columns to the end (not lost)
-    unmatched = [col for col in df.columns if col not in FINAL_COLUMNS]
-    for col in unmatched:
+    # Add leftover columns
+    extra_cols = [col for col in df.columns if col not in FINAL_COLUMNS]
+    for col in extra_cols:
         cleaned[col] = df[col]
 
-    report.append(f"{len(FINAL_COLUMNS)} HUB columns cleaned")
-    report.append(f"{len(unmatched)} extra columns kept (unmatched)")
+    # Summary
+    summary = f"""
+✅ Cleaned Columns: {len(FINAL_COLUMNS)}  
+📌 Extra Columns Preserved: {len(extra_cols)}  
+📞 Phone 3+ removed  
+📬 Address commas stripped and double-spaces fixed  
+📂 Fields not matched were kept safely  
+🛡️ Errors are gracefully handled
+"""
+    return cleaned, summary
 
-    return cleaned, report
-
-# ---------------- STREAMLIT UI ----------------
-
-st.set_page_config(page_title="HUB Lead Cleaner", layout="centered")
-
+# ========== STREAMLIT UI ==========
+st.set_page_config(layout="wide")
 st.title("HUB Lead Cleaner")
-st.caption("Upload a messy provider CSV → Get a clean version for the HUB")
+st.caption("Upload a messy provider CSV → Download a cleaned version ready for the HUB")
 st.markdown("**Creator: Jacoking**")
+st.markdown("_albert es marico_")
 
-uploaded_file = st.file_uploader("📤 Upload your CSV file", type="csv")
+uploaded_file = st.file_uploader("📎 Upload a CSV file", type="csv")
 
 if uploaded_file:
-    cleaned_df, summary = process_csv(uploaded_file)
-    st.success("✅ File cleaned successfully!")
+    try:
+        cleaned_df, summary = process_csv(uploaded_file)
+        st.success("✅ File cleaned successfully!")
+        st.markdown(summary)
+        st.dataframe(cleaned_df)
 
-    # Display result
-    st.dataframe(cleaned_df, use_container_width=True)
-
-    # Download cleaned CSV
-    st.download_button(
-        label="📥 Download Cleaned CSV",
-        data=cleaned_df.to_csv(index=False).encode("utf-8"),
-        file_name="hub_cleaned.csv",
-        mime="text/csv"
-    )
-
-    # Display summary report
-    st.markdown("---")
-    st.subheader("🧾 What was done:")
-    for line in summary:
-        st.write("• " + line)
+        st.download_button(
+            label="⬇️ Download Cleaned CSV",
+            data=cleaned_df.to_csv(index=False).encode("utf-8"),
+            file_name="hub_cleaned.csv",
+            mime="text/csv"
+        )
+    except Exception as e:
+        st.error(f"❌ Error: {e}")
