@@ -6,6 +6,8 @@ import re
 st.set_page_config(page_title="CAPNOW DATA CLEANER APP")
 st.markdown("<h1 style='text-align: center;'>CAPNOW DATA CLEANER APP</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center;'>Creator: Jaco Simkin - Director of Data Analysis </p>", unsafe_allow_html=True)
+st.markdown("⚠️ This tool is designed exclusively for cleaning data related to **financial service applications from small business owners**.")
+
 
 # Required HUB columns
 FINAL_COLUMNS = [
