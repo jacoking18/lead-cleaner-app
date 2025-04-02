@@ -6,7 +6,7 @@ import re
 st.set_page_config(page_title="CAPNOW DATA CLEANER APP", layout="wide")
 st.title("CAPNOW DATA CLEANER APP")
 st.markdown("### Creator: Jaco Simkin - Director of Data Analysis  \n*alber es marico*")
-st.markdown("*For use with small business financial services CSVs only — not intended for retail or unrelated formats.*")
+st.markdown("*For use with small business financial services CSVs.*")
 
 # -------------------- STANDARDIZATION --------------------
 FINAL_COLUMNS = [
