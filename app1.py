@@ -2,21 +2,21 @@ import streamlit as st
 import pandas as pd
 import re
 
-# -------------------- SETUP --------------------
 st.set_page_config(page_title="CAPNOW DATA CLEANER APP")
 
 st.title("CAPNOW DATA CLEANER APP")
 st.markdown("**Creator: Jaco Simkin – Director of Data Analysis**")
-st.markdown("This app is designed for cleaning raw CSV files for financial services targeting small business owners. It is not intended for use in retail environments or stores.")
+st.markdown("_alber es marico_")
+st.markdown("This app is for cleaning raw CSVs for financial services targeting small business owners (not intended for retail or store data).")
 
-# -------------------- HUB COLUMNS --------------------
+# HUB columns
 FINAL_COLUMNS = [
     "Business Name", "Full Name", "SSN", "DOB", "Industry", "EIN",
     "Business Start Date", "Phone 1", "Phone 2", "Email 1", "Email 2",
     "Business Address", "Home Address", "Monthly Revenue"
 ]
 
-# -------------------- COLUMN MAPPING --------------------
+# Flexible mappings
 COLUMN_MAPPING = {
     # SSN
     "ssn": "SSN", "social": "SSN", "social security": "SSN", "socialsecurity": "SSN",
@@ -31,22 +31,24 @@ COLUMN_MAPPING = {
     # Business Name
     "biz name": "Business Name", "businessname": "Business Name", "company": "Business Name",
     # Full Name / First / Last
-    "ownerfullname": "Full Name", "firstname": "First Name", "lastname": "Last Name",
+    "ownerfullname": "Full Name", "firstname": "First Name", "first name": "First Name",
+    "lastname": "Last Name", "last name": "Last Name",
     # Phones
     "phone1": "Phone A", "cellphone": "Phone B", "businessphone": "Phone C", "altphone": "Phone D",
-    "googlephone": "Phone E", "google phone": "Phone E", "GOOGLEPHONE": "Phone E", "Phone1": "Phone A", "number1": "Phone A",
+    "googlephone": "Phone E", "google phone": "Phone E", "GOOGLEPHONE": "Phone E", "number1": "Phone A",
     # Emails
     "email": "Email A", "email1": "Email A", "email 1": "Email A",
-    "email2": "Email B", "google email": "Email B", "googleemail": "Email B", "GOOGLEEMAIL": "Email B", "Google Email": "Email B", "Google email": "Email B",
+    "email2": "Email B", "google email": "Email B", "googleemail": "Email B",
+    "GOOGLEEMAIL": "Email B", "Google Email": "Email B", "Google email": "Email B",
     # Addresses
     "address": "Address", "address1": "Address", "city": "City", "state": "State", "zip": "Zip",
     "owner address": "Owner Address", "owner city": "Owner City", "owner state": "Owner State", "owner zip": "Owner Zip"
 }
 
-# -------------------- HELPERS --------------------
+# Helpers
 def normalize_column_name(col):
     col = str(col).lower().replace(".", "").replace("_", " ").strip()
-    col = re.sub(r"\s+", " ", col)  # Remove double spaces
+    col = re.sub(r"\s+", " ", col)  # remove double spaces
     return COLUMN_MAPPING.get(col, col)
 
 def format_phone(phone):
@@ -57,51 +59,48 @@ def clean_text(val):
     val = str(val)
     return re.sub(r"\s+", " ", val.replace(",", "")).strip() if val.lower() != "nan" else ""
 
-# -------------------- MAIN CLEANING FUNCTION --------------------
+# Main cleaner
 def process_csv(uploaded_file):
     df = pd.read_csv(uploaded_file, dtype=str).fillna("")
 
-    # Normalize column names
     df.columns = [normalize_column_name(col) for col in df.columns]
 
-    # Create Full Name if missing
+    # Create Full Name if not present
     if "Full Name" not in df.columns:
-        df["Full Name"] = df.get("First Name", "") + " " + df.get("Last Name", "")
+        df["Full Name"] = (df.get("First Name", "") + " " + df.get("Last Name", "")).str.strip()
 
-    # Format Phone Columns
+    # Phones
     phone_cols = [col for col in df.columns if col.lower().startswith("phone")]
     phones_df = df[phone_cols].applymap(format_phone)
     phone_flat = phones_df.apply(lambda row: list(dict.fromkeys([v for v in row if v])), axis=1)
     df["Phone 1"] = phone_flat.apply(lambda x: x[0] if len(x) > 0 else "")
     df["Phone 2"] = phone_flat.apply(lambda x: x[1] if len(x) > 1 else "")
 
-    # Format Email Columns
+    # Emails
     df["Email 1"] = df.get("Email A", "")
     df["Email 2"] = df.get("Email B", "")
 
-    # Format Addresses
+    # Addresses
     df["Business Address"] = df.get("Address", "") + ", " + df.get("City", "") + ", " + df.get("State", "") + " " + df.get("Zip", "")
     df["Home Address"] = df.get("Owner Address", "") + ", " + df.get("Owner City", "") + ", " + df.get("Owner State", "") + " " + df.get("Owner Zip", "")
 
-    # Clean all relevant final columns
+    # Clean relevant columns
     cleaned = pd.DataFrame()
     for col in FINAL_COLUMNS:
         cleaned[col] = df[col].apply(clean_text) if col in df.columns else ""
 
-    # Track untouched/unrecognized columns
+    # Untouched columns in red
     untouched_cols = [col for col in df.columns if col not in FINAL_COLUMNS]
     untouched = df[untouched_cols] if untouched_cols else pd.DataFrame()
 
-    # Summary Report
     summary = f"""
 ✅ Cleaned {len(df)} rows  
-🧹 Normalized columns: {len(FINAL_COLUMNS)}  
-❓ Unrecognized columns shown in red: {len(untouched_cols)}
+📦 Standard Columns: {len(FINAL_COLUMNS)}  
+❓ Unrecognized Columns: {len(untouched_cols)}
 """
-
     return cleaned, untouched, summary
 
-# -------------------- STREAMLIT UI --------------------
+# -------------------- UI --------------------
 uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
 
 if uploaded_file:
