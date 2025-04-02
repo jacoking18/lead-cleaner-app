@@ -5,7 +5,7 @@ import re
 # Branding
 st.set_page_config(page_title="CAPNOW DATA CLEANER APP")
 st.markdown("<h1 style='text-align: center;'>CAPNOW DATA CLEANER APP</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>Creator: Jacoking | albert es marico</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>Creator: Jacoking Director of Data Process </p>", unsafe_allow_html=True)
 
 # Required HUB columns
 FINAL_COLUMNS = [
