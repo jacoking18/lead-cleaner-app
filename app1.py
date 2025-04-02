@@ -79,4 +79,33 @@ def process_csv(uploaded_file):
 
     # Emails (safe fallback)
     df["Email 1"] = df["Email A"] if "Email A" in df.columns else pd.Series([""] * len(df))
-    df["Email 2"] = df["Email B"] if "Email B"
+    df["Email 2"] = df["Email B"] if "Email B" in df.columns else pd.Series([""] * len(df))
+
+    # Final output
+    cleaned = pd.DataFrame(columns=FINAL_COLUMNS)
+    for col in FINAL_COLUMNS:
+        cleaned[col] = df[col].apply(clean_text) if col in df.columns else ""
+
+    return cleaned
+
+# ------------------ Streamlit App ------------------
+
+st.set_page_config(page_title="HUB Lead Cleaner", layout="centered")
+
+st.title("HUB Lead Cleaner")
+st.markdown("Upload a messy provider CSV → Download a cleaned version ready for the HUB")
+st.caption("**Creator: Jacoking**")
+
+uploaded_file = st.file_uploader("Upload a CSV file", type="csv")
+
+if uploaded_file:
+    cleaned_df = process_csv(uploaded_file)
+    st.success("✅ Data cleaned successfully!")
+    st.dataframe(cleaned_df, use_container_width=True)
+
+    st.download_button(
+        label="📥 Download Cleaned CSV",
+        data=cleaned_df.to_csv(index=False).encode("utf-8"),
+        file_name="hub_cleaned.csv",
+        mime="text/csv"
+    )
