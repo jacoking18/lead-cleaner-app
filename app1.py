@@ -25,87 +25,85 @@ COLUMN_MAPPING = {
     "owner address": "Owner Address", "owner city": "Owner City", "owner state": "Owner State", "owner zip": "Owner Zip"
 }
 
+# Standardize column names
 def standardize_column(col):
     return COLUMN_MAPPING.get(col.strip().lower(), col.strip())
 
+# Format phone number like (123) 456-7890
 def format_phone(phone):
     digits = re.sub(r"\D", "", str(phone))
     if len(digits) == 10:
         return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
     return phone
 
+# Clean text fields
 def clean_text(val):
     return re.sub(r"\s+", " ", str(val)).strip() if pd.notna(val) else ""
 
+# Main Cleaner Function
 def process_csv(uploaded_file):
     df = pd.read_csv(uploaded_file)
     df.rename(columns=lambda c: standardize_column(c), inplace=True)
 
-    # Full name
+    # Full Name if missing
     if "Full Name" not in df.columns:
-        df["Full Name"] = df.get("First Name", pd.Series([""]*len(df))) + " " + df.get("Last Name", pd.Series([""]*len(df)))
+        df["Full Name"] = df.get("First Name", "").fillna("") + " " + df.get("Last Name", "").fillna("")
 
-    # Business Address
+    # Build Business and Home Address
     df["Business Address"] = (
-        df.get("Address", pd.Series([""])) + ", " +
-        df.get("City", pd.Series([""])) + ", " +
-        df.get("State", pd.Series([""])) + " " +
-        df.get("Zip", pd.Series([""]))
+        df.get("Address", "").fillna("") + ", " +
+        df.get("City", "").fillna("") + ", " +
+        df.get("State", "").fillna("") + " " +
+        df.get("Zip", "").fillna("")
     )
-
-    # Home Address
     df["Home Address"] = (
-        df.get("Owner Address", pd.Series([""])) + ", " +
-        df.get("Owner City", pd.Series([""])) + ", " +
-        df.get("Owner State", pd.Series([""])) + " " +
-        df.get("Owner Zip", pd.Series([""]))
+        df.get("Owner Address", "").fillna("") + ", " +
+        df.get("Owner City", "").fillna("") + ", " +
+        df.get("Owner State", "").fillna("") + " " +
+        df.get("Owner Zip", "").fillna("")
     )
 
-    # If Home Address is empty and Business Address is filled, use that
-    df["Home Address"] = df["Home Address"].replace(", ,  ", "", regex=False)
-    df["Home Address"] = df["Home Address"].where(df["Home Address"].str.strip() != "", df["Business Address"])
-
-    # Phone numbers
+    # Phone Numbers
     phone_cols = [col for col in df.columns if col.lower().startswith("phone")]
-    df["Phone 1"] = ""
-    df["Phone 2"] = ""
-    df["Phone 3"] = ""
+    df["Phone 1"], df["Phone 2"], df["Phone 3"] = "", "", ""
 
     for i, row in df.iterrows():
         phones = list(dict.fromkeys([
-            format_phone(str(row[col])) for col in phone_cols if pd.notna(row[col]) and str(row[col]).strip() != ""
+            format_phone(str(row[col])) for col in phone_cols
+            if pd.notna(row[col]) and str(row[col]).strip() != ""
         ]))
         for j in range(min(len(phones), 3)):
             df.at[i, f"Phone {j+1}"] = phones[j]
 
-    # Email
-    df["Email 1"] = df.get("Email A", pd.Series([""]))
-    df["Email 2"] = df.get("Email B", pd.Series([""]))
+    # Emails
+    df["Email 1"] = df.get("Email A", "").fillna("")
+    df["Email 2"] = df.get("Email B", "").fillna("")
 
-    # Final structure
+    # Final cleaned structure
     cleaned = pd.DataFrame(columns=FINAL_COLUMNS)
     for col in FINAL_COLUMNS:
         cleaned[col] = df[col].apply(clean_text) if col in df.columns else ""
 
     return cleaned
 
-# Streamlit app
+# ====================== Streamlit UI ======================
+
 st.title("HUB Lead Cleaner")
-st.write("Upload a messy provider CSV → Download a cleaned version ready for the HUB")
+st.caption("Upload a messy provider CSV → Download a cleaned version ready for the HUB")
+st.markdown("**Creator: Jacoking**")
 
 uploaded_file = st.file_uploader("Upload a CSV file", type="csv")
 
 if uploaded_file:
-    try:
-        cleaned_df = process_csv(uploaded_file)
-        st.success("Data cleaned successfully!")
-        st.dataframe(cleaned_df.head())
+    cleaned_df = process_csv(uploaded_file)
+    st.success("✅ Data cleaned successfully!")
 
-        st.download_button(
-            label="Download Cleaned CSV",
-            data=cleaned_df.to_csv(index=False).encode('utf-8'),
-            file_name="hub_cleaned.csv",
-            mime="text/csv"
-        )
-    except Exception as e:
-        st.error(f"⚠️ Something went wrong:\n\n{e}")
+    # Show full cleaned table like a spreadsheet
+    st.dataframe(cleaned_df, use_container_width=True, height=600)
+
+    st.download_button(
+        label="📥 Download Cleaned CSV",
+        data=cleaned_df.to_csv(index=False).encode("utf-8"),
+        file_name="hub_cleaned.csv",
+        mime="text/csv"
+    )
