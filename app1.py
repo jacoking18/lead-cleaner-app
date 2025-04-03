@@ -23,6 +23,7 @@ def check_password():
 
 if not check_password():
     st.stop()
+
 # -------------------------------------------------------------
 
 st.set_page_config(page_title="CAPNOW DATA CLEANER APP")
@@ -44,8 +45,7 @@ Business Name, Full Name, SSN, DOB, Industry, EIN
 Business Start Date, Phone 1, Phone 2, Email 1, Email 2  
 Business Address, Home Address, Monthly Revenue
 
-Second Table (Red):
-The second DataFrame (highlighted in red) shows all columns from the uploaded file that were not recognized or cleaned.
+Second Table (Red): The second DataFrame (highlighted in red) shows all columns from the uploaded file that were not recognized or cleaned.
 You can use this to see what additional data was present but not part of the HUB format.
 """)
 
@@ -126,3 +126,32 @@ def process_csv(uploaded_file):
 
 # -------------------- UI --------------------
 uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
+
+if uploaded_file:
+    try:
+        cleaned_df, untouched_df, summary = process_csv(uploaded_file)
+
+        if cleaned_df.empty and untouched_df.empty:
+            st.warning("The uploaded file was processed but contains no recognized or unrecognized columns.")
+            st.stop()
+
+        st.success("Data cleaned successfully.")
+        st.markdown("### Cleaned CSV (Full Preview)")
+        st.dataframe(cleaned_df, use_container_width=True)
+
+        if not untouched_df.empty:
+            st.markdown("### Unrecognized Columns (shown in red)")
+            st.dataframe(untouched_df.style.set_properties(**{'background-color': 'salmon'}), use_container_width=True)
+
+        st.download_button(
+            label="Download Cleaned CSV",
+            data=cleaned_df.to_csv(index=False).encode("utf-8"),
+            file_name="hub_cleaned.csv",
+            mime="text/csv"
+        )
+
+        st.markdown("### Summary")
+        st.text(summary)
+
+    except Exception as e:
+        st.error(f"Error during processing: {str(e)}")
