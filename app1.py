@@ -6,7 +6,6 @@ st.set_page_config(page_title="CAPNOW DATA CLEANER APP")
 
 st.title("CAPNOW DATA CLEANER APP")
 st.markdown("**Creator: Jaco Simkin – Director of Data Analysis**")
-
 st.markdown("This app is for cleaning raw CSVs for financial services targeting small business owners.")
 
 # HUB columns
@@ -27,7 +26,7 @@ COLUMN_MAPPING = {
     # Business Start Date
     "business start date": "Business Start Date", "start date": "Business Start Date", "bsd": "Business Start Date", "yearsinbusiness": "Business Start Date",
     # Monthly Revenue
-    "monthly revenue": "Monthly Revenue", "businessmonthlyrevenue": "Monthly Revenue", "rev": "Monthly Revenue",
+    "monthly revenue": "Monthly Revenue", "Revenue", "revenue" "businessmonthlyrevenue": "Monthly Revenue", "rev": "Monthly Revenue",
     # Business Name
     "biz name": "Business Name", "businessname": "Business Name", "company": "Business Name",
     # Full Name / First / Last
