@@ -106,7 +106,7 @@ def process_file(uploaded_file):
     if "Full Name" not in df.columns:
         first = df.get("First Name", pd.Series([""] * len(df)))
         last = df.get("Last Name", pd.Series([""] * len(df)))
-        df["Full Name"] = (first + " " + last).str.strip()
+        df["Full Name"] = first.fillna("") + " " + last.fillna("")
 
     phone_candidates = [col for col in df.columns if is_phone_series(df[col])]
     df["Phone 1"] = df[phone_candidates[0]].apply(format_phone) if len(phone_candidates) > 0 else ""
