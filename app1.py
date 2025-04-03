@@ -39,6 +39,7 @@ It standardizes messy or inconsistent data into a unified format required by the
 What it does:
 - Automatically detects phone and email columns by structure (e.g., @ for emails, 10-digit for phones)
 - Normalizes messy columns like `biz name`, `googlephone`, `revenue`, `turnover`, etc.
+- Recognizes single-column combined addresses
 - Outputs a clean DataFrame with the following columns:
 
 Lead Date, Business Name, Full Name, SSN, DOB, Industry, EIN  
@@ -64,7 +65,8 @@ COLUMN_MAPPING = {
     "biz name": "Business Name", "businessname": "Business Name", "company": "Business Name", "business name": "Business Name",
     "ownerfullname": "Full Name", "firstname": "First Name", "lastname": "Last Name",
     "address": "Address", "city": "City", "state": "State", "zip": "Zip",
-    "owner address": "Owner Address", "owner city": "Owner City", "owner state": "Owner State", "owner zip": "Owner Zip"
+    "owner address": "Owner Address", "owner city": "Owner City", "owner state": "Owner State", "owner zip": "Owner Zip",
+    "business address street,city,state,zip": "Address"
 }
 
 def normalize_column_name(col):
@@ -110,6 +112,12 @@ def process_file(uploaded_file):
     email_candidates = [col for col in df.columns if is_email_series(df[col])]
     df["Email 1"] = df[email_candidates[0]] if len(email_candidates) > 0 else ""
     df["Email 2"] = df[email_candidates[1]] if len(email_candidates) > 1 else ""
+
+    # Combine address if in one field
+    if "Address" not in df.columns and any("address" in c for c in df.columns):
+        for c in df.columns:
+            if "address" in c and "," in df[c].iloc[0]:
+                df["Address"] = df[c]
 
     df["Business Address"] = df.get("Address", "") + ", " + df.get("City", "") + ", " + df.get("State", "") + " " + df.get("Zip", "")
     df["Home Address"] = df.get("Owner Address", "") + ", " + df.get("Owner City", "") + ", " + df.get("Owner State", "") + " " + df.get("Owner Zip", "")
