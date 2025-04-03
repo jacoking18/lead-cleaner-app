@@ -66,7 +66,8 @@ COLUMN_MAPPING = {
     "ownerfullname": "Full Name", "firstname": "First Name", "lastname": "Last Name",
     "address": "Address", "city": "City", "state": "State", "zip": "Zip",
     "owner address": "Owner Address", "owner city": "Owner City", "owner state": "Owner State", "owner zip": "Owner Zip",
-    "business address street,city,state,zip": "Address"
+    "business address street,city,state,zip": "Address",
+    "industry": "Industry"
 }
 
 def normalize_column_name(col):
@@ -99,10 +100,16 @@ def process_file(uploaded_file):
 
     df.columns = [normalize_column_name(col) for col in df.columns]
 
-    # Always generate Full Name from First Name and Last Name
-    df["First Name"] = df.get("First Name", pd.Series([""] * len(df)))
-    df["Last Name"] = df.get("Last Name", pd.Series([""] * len(df)))
-    df["Full Name"] = (df["First Name"].fillna("") + " " + df["Last Name"].fillna("")).str.title()
+    df.columns = [col.strip() for col in df.columns]
+    col_lower_map = {col.lower(): col for col in df.columns}
+
+    first_col = col_lower_map.get("first name")
+    last_col = col_lower_map.get("last name")
+
+    if first_col and last_col:
+        df["Full Name"] = (df[first_col].fillna("") + " " + df[last_col].fillna(" ")).str.title()
+    else:
+        df["Full Name"] = df.get("Full Name", "")
 
     phone_candidates = [col for col in df.columns if is_phone_series(df[col])]
     df["Phone 1"] = df[phone_candidates[0]].apply(format_phone) if len(phone_candidates) > 0 else ""
