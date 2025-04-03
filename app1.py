@@ -100,17 +100,19 @@ def normalize_column_name(col):
 
 def guess_phone_columns(df):
     phone_cols = [c for c in df.columns if any(keyword in c for keyword in ["phone", "cell"])]
-    return phone_cols[:2] if len(phone_cols) >= 2 else phone_cols + [""]
+    return phone_cols[:2] + [None]*(2 - len(phone_cols))
 
 def guess_email_columns(df):
-    email_cols = [c for c in df.columns if "@" in str(df[c].iloc[0]) or "email" in c]
-    return email_cols[:2] if len(email_cols) >= 2 else email_cols + [""]
+    email_cols = [c for c in df.columns if "@" in str(df[c].astype(str).iloc[0]) or "email" in c]
+    return email_cols[:2] + [None]*(2 - len(email_cols))
 
 def build_full_name(df):
-    if "Full Name" in df.columns:
+    if "Full Name" in df.columns and df["Full Name"].notna().any():
         return df["Full Name"]
     elif "First Name" in df.columns and "Last Name" in df.columns:
         return df["First Name"].astype(str).str.strip() + " " + df["Last Name"].astype(str).str.strip()
+    elif "Name" in df.columns:
+        return df["Name"]
     return pd.Series(["" for _ in range(len(df))])
 
 def clean_text(val):
@@ -125,8 +127,8 @@ def process_file(uploaded_file):
     ext = os.path.splitext(uploaded_file.name)[1].lower()
     df = pd.read_csv(uploaded_file) if ext == ".csv" else pd.read_excel(uploaded_file)
 
-    df.columns = [col.lower().strip().replace("  ", " ").replace("\n", " ") for col in df.columns]
-    df.rename(columns=lambda c: COLUMN_MAPPING.get(c.strip().lower(), c.strip().title()), inplace=True)
+    df.columns = [normalize_column_name(c) for c in df.columns]
+    df.rename(columns={col: COLUMN_MAPPING.get(col, col.title()) for col in df.columns}, inplace=True)
 
     df["Full Name"] = build_full_name(df)
 
