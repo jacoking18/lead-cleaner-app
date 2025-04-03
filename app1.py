@@ -112,7 +112,7 @@ def process_csv(uploaded_file):
 
     cleaned = pd.DataFrame()
     for col in FINAL_COLUMNS:
-        cleaned[col] = df[col].apply(clean_text) if col in df.columns else ""
+        cleaned[col] = df[col].apply(clean_text) if col in df.columns else [""] * len(df)
 
     untouched_cols = [col for col in df.columns if col not in FINAL_COLUMNS]
     untouched = df[untouched_cols] if untouched_cols else pd.DataFrame()
