@@ -7,7 +7,7 @@ def check_password():
     def password_entered():
         if st.session_state["password"] == "capnow$":
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # clear password from memory
+            del st.session_state["password"]
         else:
             st.session_state["password_correct"] = False
 
@@ -26,6 +26,17 @@ if not check_password():
 # -------------------------------------------------------------
 
 st.set_page_config(page_title="CAPNOW DATA CLEANER APP")
+
+# ---------- LOGO ----------
+st.markdown(
+    """
+    <div style="text-align: center;">
+        <img src="logo.png" width="160">
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+# --------------------------
 
 st.title("CAPNOW DATA CLEANER APP")
 st.markdown("**Creator: Jaco Simkin – Director of Data Analysis**")
