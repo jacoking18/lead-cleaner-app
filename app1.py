@@ -33,7 +33,7 @@ st.title("CAPNOW DATA CLEANER APP")
 st.markdown("**Creator: Jaco Simkin – Director of Data Analysis**")
 
 st.markdown("""
-This app automatically cleans raw lead files (CSV format) received from multiple providers.
+This app automatically cleans raw lead files (CSV or XLSX format) received from multiple providers.
 
 It standardizes messy or inconsistent data into a unified format required by the CAPNOW HUB system.
 
@@ -91,31 +91,45 @@ def clean_text(val):
     return re.sub(r"\s+", " ", val.replace(",", "")).strip() if val.lower() != "nan" else ""
 
 # Main cleaner
-def process_csv(uploaded_file):
-    df = pd.read_csv(uploaded_file, dtype=str).fillna("")
+def process_file(uploaded_file):
+    if uploaded_file.name.endswith(".csv"):
+        df = pd.read_csv(uploaded_file, dtype=str).fillna("")
+    else:
+        df = pd.read_excel(uploaded_file, dtype=str).fillna("")
+
     df.columns = [normalize_column_name(col) for col in df.columns]
 
     if "Full Name" not in df.columns:
-        df["Full Name"] = (df.get("First Name", "") + " " + df.get("Last Name", "")).str.strip()
+        df["Full Name"] = (
+            df.get("First Name", [""] * len(df)) + " " + df.get("Last Name", [""] * len(df))
+        ).str.strip()
 
     phone_cols = [col for col in df.columns if col.lower().startswith("phone")]
-    phones_df = df[phone_cols].applymap(format_phone)
+    phones_df = df[phone_cols].applymap(format_phone) if phone_cols else pd.DataFrame([[""] * len(df)]).T
     phone_flat = phones_df.apply(lambda row: list(dict.fromkeys([v for v in row if v])), axis=1)
     df["Phone 1"] = phone_flat.apply(lambda x: x[0] if len(x) > 0 else "")
     df["Phone 2"] = phone_flat.apply(lambda x: x[1] if len(x) > 1 else "")
 
-    df["Email 1"] = df.get("Email A", "")
-    df["Email 2"] = df.get("Email B", "")
+    df["Email 1"] = df.get("Email A", [""] * len(df))
+    df["Email 2"] = df.get("Email B", [""] * len(df))
 
-    df["Business Address"] = df.get("Address", "") + ", " + df.get("City", "") + ", " + df.get("State", "") + " " + df.get("Zip", "")
-    df["Home Address"] = df.get("Owner Address", "") + ", " + df.get("Owner City", "") + ", " + df.get("Owner State", "") + " " + df.get("Owner Zip", "")
+    df["Business Address"] = (
+        df.get("Address", [""] * len(df)) + ", " +
+        df.get("City", [""] * len(df)) + ", " +
+        df.get("State", [""] * len(df)) + " " +
+        df.get("Zip", [""] * len(df))
+    )
+
+    df["Home Address"] = (
+        df.get("Owner Address", [""] * len(df)) + ", " +
+        df.get("Owner City", [""] * len(df)) + ", " +
+        df.get("Owner State", [""] * len(df)) + " " +
+        df.get("Owner Zip", [""] * len(df))
+    )
 
     cleaned = pd.DataFrame()
     for col in FINAL_COLUMNS:
-        if col in df.columns:
-            cleaned[col] = df[col].apply(clean_text)
-        else:
-            cleaned[col] = [""] * len(df)
+        cleaned[col] = df[col].apply(clean_text) if col in df.columns else [""] * len(df)
 
     untouched_cols = [col for col in df.columns if col not in FINAL_COLUMNS]
     untouched = df[untouched_cols] if untouched_cols else pd.DataFrame()
@@ -128,11 +142,11 @@ def process_csv(uploaded_file):
     return cleaned, untouched, summary
 
 # -------------------- UI --------------------
-uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
+uploaded_file = st.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx"])
 
 if uploaded_file:
     try:
-        cleaned_df, untouched_df, summary = process_csv(uploaded_file)
+        cleaned_df, untouched_df, summary = process_file(uploaded_file)
 
         if cleaned_df.empty and untouched_df.empty:
             st.warning("The uploaded file was processed but contains no recognized or unrecognized columns.")
@@ -159,3 +173,6 @@ if uploaded_file:
     except Exception as e:
         st.error(f"Error during processing: {str(e)}")
 
+# -------------------- Footer --------------------
+st.markdown("<hr style='margin-top:50px;'>", unsafe_allow_html=True)
+st.caption("CAPNOW Data Cleaner v1.0 – April 2025")
