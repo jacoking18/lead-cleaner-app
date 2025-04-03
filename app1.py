@@ -63,7 +63,7 @@ COLUMN_MAPPING = {
     "ein": "EIN", "employer id": "EIN",
     "business start date": "Business Start Date", "start date": "Business Start Date", "bsd": "Business Start Date", "yearsinbusiness": "Business Start Date",
     "monthly revenue": "Monthly Revenue", "businessmonthlyrevenue": "Monthly Revenue", "rev": "Monthly Revenue",
-    "revenue": "Monthly Revenue", "Revenue": "Monthly Revenue",
+    "revenue": "Monthly Revenue", "Revenue": "Monthly Revenue", "turnover": "Monthly Revenue", "Turnover": "Monthly Revenue",
     "biz name": "Business Name", "businessname": "Business Name", "company": "Business Name",
     "ownerfullname": "Full Name", "firstname": "First Name", "first name": "First Name",
     "lastname": "Last Name", "last name": "Last Name",
@@ -73,85 +73,4 @@ COLUMN_MAPPING = {
     "email2": "Email B", "google email": "Email B", "googleemail": "Email B",
     "GOOGLEEMAIL": "Email B", "Google Email": "Email B", "Google email": "Email B",
     "address": "Address", "address1": "Address", "city": "City", "state": "State", "zip": "Zip",
-    "owner address": "Owner Address", "owner city": "Owner City", "owner state": "Owner State", "owner zip": "Owner Zip"
-}
-
-# Helpers
-def normalize_column_name(col):
-    col = str(col).lower().replace(".", "").replace("_", " ").strip()
-    col = re.sub(r"\s+", " ", col)
-    return COLUMN_MAPPING.get(col, col)
-
-def format_phone(phone):
-    digits = re.sub(r"\D", "", str(phone))
-    return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}" if len(digits) == 10 else str(phone)
-
-def clean_text(val):
-    val = str(val)
-    return re.sub(r"\s+", " ", val.replace(",", "")).strip() if val.lower() != "nan" else ""
-
-# Main cleaner
-def process_csv(uploaded_file):
-    df = pd.read_csv(uploaded_file, dtype=str).fillna("")
-    df.columns = [normalize_column_name(col) for col in df.columns]
-
-    if "Full Name" not in df.columns:
-        df["Full Name"] = (df.get("First Name", "") + " " + df.get("Last Name", "")).str.strip()
-
-    phone_cols = [col for col in df.columns if col.lower().startswith("phone")]
-    phones_df = df[phone_cols].applymap(format_phone)
-    phone_flat = phones_df.apply(lambda row: list(dict.fromkeys([v for v in row if v])), axis=1)
-    df["Phone 1"] = phone_flat.apply(lambda x: x[0] if len(x) > 0 else "")
-    df["Phone 2"] = phone_flat.apply(lambda x: x[1] if len(x) > 1 else "")
-
-    df["Email 1"] = df.get("Email A", "")
-    df["Email 2"] = df.get("Email B", "")
-
-    df["Business Address"] = df.get("Address", "") + ", " + df.get("City", "") + ", " + df.get("State", "") + " " + df.get("Zip", "")
-    df["Home Address"] = df.get("Owner Address", "") + ", " + df.get("Owner City", "") + ", " + df.get("Owner State", "") + " " + df.get("Owner Zip", "")
-
-    cleaned = pd.DataFrame()
-    for col in FINAL_COLUMNS:
-        cleaned[col] = df[col].apply(clean_text) if col in df.columns else [""] * len(df)
-
-    untouched_cols = [col for col in df.columns if col not in FINAL_COLUMNS]
-    untouched = df[untouched_cols] if untouched_cols else pd.DataFrame()
-
-    summary = (
-        f"Cleaned rows: {len(df)}\n"
-        f"Standard columns: {len(FINAL_COLUMNS)}\n"
-        f"Unrecognized columns: {len(untouched_cols)}"
-    )
-    return cleaned, untouched, summary
-
-# -------------------- UI --------------------
-uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
-
-if uploaded_file:
-    try:
-        cleaned_df, untouched_df, summary = process_csv(uploaded_file)
-
-        if cleaned_df.empty and untouched_df.empty:
-            st.warning("The uploaded file was processed but contains no recognized or unrecognized columns.")
-            st.stop()
-
-        st.success("Data cleaned successfully.")
-        st.markdown("### Cleaned CSV (Full Preview)")
-        st.dataframe(cleaned_df, use_container_width=True)
-
-        if not untouched_df.empty:
-            st.markdown("### Unrecognized Columns (shown in red)")
-            st.dataframe(untouched_df.style.set_properties(**{'background-color': 'salmon'}), use_container_width=True)
-
-        st.download_button(
-            label="Download Cleaned CSV",
-            data=cleaned_df.to_csv(index=False).encode("utf-8"),
-            file_name="hub_cleaned.csv",
-            mime="text/csv"
-        )
-
-        st.markdown("### Summary")
-        st.text(summary)
-
-    except Exception as e:
-        st.error(f"Error during processing: {str(e)}")
+    "owner address": "Owner Address", "owner city": "Owner City", "owner state": "
