@@ -169,4 +169,3 @@ if uploaded_file:
 
 st.markdown("<hr style='margin-top:50px;'>", unsafe_allow_html=True)
 st.caption("CAPNOW Data Cleaner v1.0 – April 2025")
-
