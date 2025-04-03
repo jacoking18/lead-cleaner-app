@@ -99,9 +99,9 @@ def process_file(uploaded_file):
 
     first = df.get("First Name", pd.Series([""] * len(df)))
     last = df.get("Last Name", pd.Series([""] * len(df)))
-    full = df.get("Full Name", pd.Series([""] * len(df)))
+
     if "Full Name" not in df.columns or df["Full Name"].str.strip().eq("").all():
-        df["Full Name"] = first.fillna("") + " " + last.fillna("")
+        df["Full Name"] = (first.fillna("") + " " + last.fillna("")).str.title()
 
     phone_candidates = [col for col in df.columns if is_phone_series(df[col])]
     df["Phone 1"] = df[phone_candidates[0]].apply(format_phone) if len(phone_candidates) > 0 else ""
@@ -165,5 +165,3 @@ if uploaded_file:
 
 st.markdown("<hr style='margin-top:50px;'>", unsafe_allow_html=True)
 st.caption("CAPNOW Data Cleaner v1.0 – April 2025")
-
-
