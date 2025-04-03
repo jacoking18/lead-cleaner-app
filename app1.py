@@ -27,20 +27,30 @@ if not check_password():
 
 st.set_page_config(page_title="CAPNOW DATA CLEANER APP")
 
-# ---------- LOGO ----------
-st.markdown(
-    """
-    <div style="text-align: center;">
-        <img src="logo.png" width="160">
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-# --------------------------
+# ✅ Streamlit-safe logo load (must be in same folder as this file)
+st.image("logo.png", width=160)
 
 st.title("CAPNOW DATA CLEANER APP")
 st.markdown("**Creator: Jaco Simkin – Director of Data Analysis**")
-st.markdown("This app is for cleaning raw CSVs for financial services targeting small business owners.")
+
+st.markdown("""
+This app automatically cleans raw lead files (CSV format) received from multiple providers.
+
+It standardizes messy or inconsistent data into a unified format required by the CAPNOW HUB system.
+
+### 🧹 What it does:
+- Normalizes messy columns like `biz name`, `googlephone`, `revenue`, etc.
+- Outputs a clean DataFrame with the following columns:
+
+`Business Name`, `Full Name`, `SSN`, `DOB`, `Industry`, `EIN`,  
+`Business Start Date`, `Phone 1`, `Phone 2`, `Email 1`, `Email 2`,  
+`Business Address`, `Home Address`, `Monthly Revenue`
+
+### 📛 Second Table (Red):
+The second (red-highlighted) DataFrame shows **all columns from the uploaded file that were not recognized or cleaned**.  
+You can use this to see what additional data was present but not part of the HUB format.
+
+""")
 
 # HUB columns
 FINAL_COLUMNS = [
