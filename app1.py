@@ -26,7 +26,8 @@ COLUMN_MAPPING = {
     # Business Start Date
     "business start date": "Business Start Date", "start date": "Business Start Date", "bsd": "Business Start Date", "yearsinbusiness": "Business Start Date",
     # Monthly Revenue
-    "monthly revenue": "Monthly Revenue", "Revenue", "revenue" "businessmonthlyrevenue": "Monthly Revenue", "rev": "Monthly Revenue",
+    "monthly revenue": "Monthly Revenue", "businessmonthlyrevenue": "Monthly Revenue", "rev": "Monthly Revenue",
+    "revenue": "Monthly Revenue", "Revenue": "Monthly Revenue",
     # Business Name
     "biz name": "Business Name", "businessname": "Business Name", "company": "Business Name",
     # Full Name / First / Last
