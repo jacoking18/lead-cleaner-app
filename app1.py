@@ -99,11 +99,10 @@ def process_file(uploaded_file):
 
     df.columns = [normalize_column_name(col) for col in df.columns]
 
-    first = df.get("First Name", pd.Series([""] * len(df)))
-    last = df.get("Last Name", pd.Series([""] * len(df)))
-
-    if "Full Name" not in df.columns or df["Full Name"].str.strip().eq("").all():
-        df["Full Name"] = (first.fillna("") + " " + last.fillna("")).str.title()
+    # Always generate Full Name from First Name and Last Name
+    df["First Name"] = df.get("First Name", pd.Series([""] * len(df)))
+    df["Last Name"] = df.get("Last Name", pd.Series([""] * len(df)))
+    df["Full Name"] = (df["First Name"].fillna("") + " " + df["Last Name"].fillna("")).str.title()
 
     phone_candidates = [col for col in df.columns if is_phone_series(df[col])]
     df["Phone 1"] = df[phone_candidates[0]].apply(format_phone) if len(phone_candidates) > 0 else ""
@@ -113,7 +112,6 @@ def process_file(uploaded_file):
     df["Email 1"] = df[email_candidates[0]] if len(email_candidates) > 0 else ""
     df["Email 2"] = df[email_candidates[1]] if len(email_candidates) > 1 else ""
 
-    # Combine address if in one field
     if "Address" not in df.columns and any("address" in c for c in df.columns):
         for c in df.columns:
             if "address" in c and "," in df[c].iloc[0]:
