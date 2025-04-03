@@ -6,7 +6,6 @@ st.set_page_config(page_title="CAPNOW DATA CLEANER APP")
 
 st.title("CAPNOW DATA CLEANER APP")
 st.markdown("**Creator: Jaco Simkin – Director of Data Analysis**")
-st.markdown("_alber es marico_")
 st.markdown("This app is for cleaning raw CSVs for financial services targeting small business owners.")
 
 # HUB columns
