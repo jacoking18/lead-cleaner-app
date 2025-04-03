@@ -1,8 +1,9 @@
 import streamlit as st
 import pandas as pd
 import re
-from datetime import datetime
 import os
+from datetime import datetime
+from io import StringIO, BytesIO
 
 # -------------------- PASSWORD PROTECTION --------------------
 def check_password():
@@ -14,10 +15,10 @@ def check_password():
             st.session_state["password_correct"] = False
 
     if "password_correct" not in st.session_state:
-        st.text_input("Enter password to access the app:", type="password", on_change=password_entered, key="password")
+        st.text_input("Enter password:", type="password", on_change=password_entered, key="password")
         return False
     elif not st.session_state["password_correct"]:
-        st.text_input("Enter password to access the app:", type="password", on_change=password_entered, key="password")
+        st.text_input("Enter password:", type="password", on_change=password_entered, key="password")
         st.error("Incorrect password.")
         return False
     else:
@@ -25,139 +26,137 @@ def check_password():
 
 if not check_password():
     st.stop()
+# -------------------------------------------------------------
 
 st.set_page_config(page_title="CAPNOW DATA CLEANER APP")
-st.image("logo.png", width=160)
 st.title("CAPNOW DATA CLEANER APP")
 st.markdown("**Creator: Jaco Simkin – Director of Data Analysis**")
 
 st.markdown("""
-This app automatically cleans raw lead files (CSV or Excel format) received from multiple providers.
-
+This app automatically cleans raw lead files (CSV or Excel) received from multiple providers.
 It standardizes messy or inconsistent data into a unified format required by the CAPNOW HUB system.
 
-What it does:
-- Automatically detects phone and email columns by structure (e.g., @ for emails, 10-digit for phones)
-- Normalizes messy columns like `biz name`, `googlephone`, `revenue`, `turnover`, etc.
-- Recognizes single-column combined addresses
-- Outputs a clean DataFrame with the following columns:
+**What it does:**
+- Normalizes messy column headers and standardizes formats
+- Recognizes and extracts key fields even if headers are nonstandard
+- Shows a clean table with the main fields
+- Highlights unrecognized columns in red
 
-Lead Date, Business Name, Full Name, SSN, DOB, Industry, EIN  
-Business Start Date, Phone 1, Phone 2, Email 1, Email 2  
-Business Address, Home Address, Monthly Revenue
+**Columns output:**
+Lead Date, Business Name, Full Name, SSN, DOB, Industry, EIN, Business Start Date,
+Phone 1, Phone 2, Email 1, Email 2, Business Address
 
-Second Table (Red): The second DataFrame (highlighted in red) shows all columns from the uploaded file that were not recognized or cleaned.
+**Second Table (Red):**
+Shows all columns from your upload that were **not recognized or cleaned**, so you can review extra info.
 """)
 
+# Standard HUB columns
 FINAL_COLUMNS = [
     "Lead Date", "Business Name", "Full Name", "SSN", "DOB", "Industry", "EIN",
-    "Business Start Date", "Phone 1", "Phone 2", "Email 1", "Email 2",
-    "Business Address", "Home Address", "Monthly Revenue"
+    "Business Start Date", "Phone 1", "Phone 2", "Email 1", "Email 2", "Business Address"
 ]
 
+# Extended dictionary for messy headers
 COLUMN_MAPPING = {
-    "date": "Lead Date", "lead date": "Lead Date", "submission date": "Lead Date",
-    "ssn": "SSN", "social": "SSN", "social security": "SSN", "ss number": "SSN",
+    # SSN
+    "ssn": "SSN", "social": "SSN", "social security": "SSN", "socialsecurity": "SSN",
+
+    # DOB
     "dob": "DOB", "birth date": "DOB", "date of birth": "DOB",
-    "ein": "EIN", "employer id": "EIN", "employer identification": "EIN",
-    "business start date": "Business Start Date", "start date": "Business Start Date", "start": "Business Start Date",
-    "monthly revenue": "Monthly Revenue", "rev": "Monthly Revenue", "revenue": "Monthly Revenue", "turnover": "Monthly Revenue",
-    "biz name": "Business Name", "businessname": "Business Name", "company": "Business Name", "business name": "Business Name", "company name": "Business Name",
-    "ownerfullname": "Full Name", "firstname": "First Name", "last name": "Last Name", "first name": "First Name", "lastname": "Last Name", "name": "Name",
-    "address": "Address", "city": "City", "state": "State", "zip": "Zip", "zipcode": "Zip",
-    "owner address": "Owner Address", "owner city": "Owner City", "owner state": "Owner State", "owner zip": "Owner Zip",
-    "business address street,city,state,zip": "Address",
-    "industry": "Industry"
+
+    # EIN
+    "ein": "EIN", "employer id": "EIN",
+
+    # Business Start Date
+    "business start date": "Business Start Date", "start date": "Business Start Date", "bsd": "Business Start Date", "yearsinbusiness": "Business Start Date",
+
+    # Revenue
+    "monthly revenue": "Monthly Revenue", "revenue": "Monthly Revenue", "turnover": "Monthly Revenue",
+
+    # Business Name
+    "biz name": "Business Name", "businessname": "Business Name", "company": "Business Name", "business": "Business Name",
+
+    # Full Name / First + Last
+    "name": "Full Name", "full name": "Full Name", "firstname": "First Name", "first name": "First Name",
+    "lastname": "Last Name", "last name": "Last Name",
+
+    # Phones
+    "phone": "Phone", "phone number": "Phone", "cellphone": "Phone", "mobile": "Phone",
+
+    # Emails
+    "email": "Email", "email address": "Email",
+
+    # Address
+    "address": "Address", "city": "City", "state": "State", "zip": "Zip",
+    "street": "Street", "business address": "Address", "business address street": "Street"
 }
 
+# Helpers
 def normalize_column_name(col):
-    col = str(col).lower().replace(".", "").replace("_", " ").strip()
-    col = re.sub(r"\s+", " ", col)
-    return COLUMN_MAPPING.get(col, col)
+    return col.lower().strip()
 
-def format_phone(val):
-    digits = re.sub(r"\D", "", str(val))
-    return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}" if len(digits) == 10 else ""
+def guess_phone_columns(df):
+    phone_cols = [c for c in df.columns if any(keyword in c for keyword in ["phone", "cell"])]
+    return phone_cols[:2] if len(phone_cols) >= 2 else phone_cols + [""]
 
-def is_phone_series(series):
-    return series.apply(lambda x: len(re.sub(r"\D", "", str(x))) == 10).mean() > 0.5
+def guess_email_columns(df):
+    email_cols = [c for c in df.columns if "email" in c]
+    return email_cols[:2] if len(email_cols) >= 2 else email_cols + [""]
 
-def is_email_series(series):
-    return series.apply(lambda x: "@" in str(x)).mean() > 0.5
+def build_full_name(df):
+    if "full name" not in df.columns:
+        if "first name" in df.columns and "last name" in df.columns:
+            return df["first name"].astype(str).str.strip() + " " + df["last name"].astype(str).str.strip()
+    return df.get("full name", pd.Series(["" for _ in range(len(df))]))
 
 def clean_text(val):
-    val = str(val)
-    return re.sub(r"\s+", " ", val.replace(",", "")).strip() if val.lower() != "nan" else ""
+    if pd.isna(val): return ""
+    return re.sub(r"\s+", " ", str(val).replace(",", "")).strip()
+
+def format_phone(phone):
+    digits = re.sub(r"\D", "", str(phone))
+    return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}" if len(digits) == 10 else str(phone)
 
 def process_file(uploaded_file):
-    file_ext = uploaded_file.name.split(".")[-1].lower()
-    base_filename = os.path.splitext(uploaded_file.name)[0]
+    ext = os.path.splitext(uploaded_file.name)[1].lower()
+    df = pd.read_csv(uploaded_file) if ext == ".csv" else pd.read_excel(uploaded_file)
 
-    if file_ext == "csv":
-        df = pd.read_csv(uploaded_file, dtype=str).fillna("")
-    else:
-        df = pd.read_excel(uploaded_file, dtype=str).fillna("")
+    # Normalize headers
+    col_lower_map = {col: normalize_column_name(col) for col in df.columns}
+    df.rename(columns=col_lower_map, inplace=True)
 
-    df.columns = [normalize_column_name(col) for col in df.columns]
-    df.columns = [col.strip().lower() for col in df.columns]  # Clean title casing and spacing
-    col_lower_map = {col.lower().strip(): col for col in df.columns]
+    # Map known headers
+    df.columns = [COLUMN_MAPPING.get(col, col) for col in df.columns]
 
-    first_col = col_lower_map.get("first name")
-    last_col = col_lower_map.get("last name")
+    df["Full Name"] = build_full_name(df)
 
-    if first_col and last_col:
-        df["Full Name"] = (df[first_col].fillna("") + " " + df[last_col].fillna(" ")).str.title()
-    elif "name" in df.columns and "Full Name" not in df.columns:
-        df["Full Name"] = df["name"].apply(str).str.title()
-    else:
-        df["Full Name"] = df.get("Full Name", "")
+    phone_cols = guess_phone_columns(df)
+    df["Phone 1"] = df[phone_cols[0]].apply(format_phone) if phone_cols[0] in df.columns else ""
+    df["Phone 2"] = df[phone_cols[1]].apply(format_phone) if phone_cols[1] in df.columns else ""
 
-    phone_candidates = [col for col in df.columns if is_phone_series(df[col])]
-    df["Phone 1"] = df[phone_candidates[0]].apply(format_phone) if len(phone_candidates) > 0 else ""
-    df["Phone 2"] = df[phone_candidates[1]].apply(format_phone) if len(phone_candidates) > 1 else ""
+    email_cols = guess_email_columns(df)
+    df["Email 1"] = df[email_cols[0]] if email_cols[0] in df.columns else ""
+    df["Email 2"] = df[email_cols[1]] if email_cols[1] in df.columns else ""
 
-    email_candidates = [col for col in df.columns if is_email_series(df[col])]
-    df["Email 1"] = df[email_candidates[0]] if len(email_candidates) > 0 else ""
-    df["Email 2"] = df[email_candidates[1]] if len(email_candidates) > 1 else ""
+    # Combine address fields
+    df["Business Address"] = df.get("Street", "") + ", " + df.get("City", "") + ", " + df.get("State", "") + " " + df.get("Zip", "")
 
-    if "address" not in df.columns and any("address" in c for c in df.columns):
-        for c in df.columns:
-            if "address" in c and "," in df[c].iloc[0]:
-                df["address"] = df[c]
+    df["Lead Date"] = datetime.today().strftime("%m/%d/%Y")
 
-    df["Business Address"] = df.get("address", "") + ", " + df.get("city", "") + ", " + df.get("state", "") + " " + df.get("zip", "")
-    df["Home Address"] = df.get("owner address", "") + ", " + df.get("owner city", "") + ", " + df.get("owner state", "") + " " + df.get("owner zip", "")
-
-    if "lead date" in df.columns:
-        df["lead date"] = pd.to_datetime(df["lead date"], errors="coerce").dt.strftime("%m/%d/%Y")
-        df["lead date"] = df["lead date"].fillna("")
-
-    cleaned = pd.DataFrame()
-    for col in FINAL_COLUMNS:
-        key = col.lower()
-        if key in df.columns:
-            cleaned[col] = df[key].apply(clean_text)
-        else:
-            cleaned[col] = [""] * len(df)
-
-    untouched_cols = [col for col in df.columns if col.title() not in FINAL_COLUMNS]
+    cleaned = pd.DataFrame({col: df[col].apply(clean_text) if col in df.columns else "" for col in FINAL_COLUMNS})
+    untouched_cols = [c for c in df.columns if c not in FINAL_COLUMNS]
     untouched = df[untouched_cols] if untouched_cols else pd.DataFrame()
 
-    summary = (
-        f"Cleaned rows: {len(df)}\n"
-        f"Standard columns: {len(FINAL_COLUMNS)}\n"
-        f"Unrecognized columns: {len(untouched_cols)}"
-    )
+    return cleaned, untouched
 
-    return cleaned, untouched, summary, base_filename
-
+# -------------------- UI --------------------
 uploaded_file = st.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx"])
 
 if uploaded_file:
     try:
-        cleaned_df, untouched_df, summary, base_filename = process_file(uploaded_file)
-
+        cleaned_df, untouched_df = process_file(uploaded_file)
         st.success("Data cleaned successfully.")
+
         st.markdown("### Cleaned CSV (Full Preview)")
         st.dataframe(cleaned_df, use_container_width=True)
 
@@ -165,18 +164,13 @@ if uploaded_file:
             st.markdown("### Unrecognized Columns (shown in red)")
             st.dataframe(untouched_df.style.set_properties(**{'background-color': 'salmon'}), use_container_width=True)
 
+        filename = os.path.splitext(uploaded_file.name)[0] + "_cleaned.csv"
         st.download_button(
             label="Download Cleaned CSV",
             data=cleaned_df.to_csv(index=False).encode("utf-8"),
-            file_name=f"{base_filename}_cleaned.csv",
+            file_name=filename,
             mime="text/csv"
         )
 
-        st.markdown("### Summary")
-        st.text(summary)
-
     except Exception as e:
         st.error(f"Error during processing: {str(e)}")
-
-st.markdown("<hr style='margin-top:50px;'>", unsafe_allow_html=True)
-st.caption("CAPNOW Data Cleaner v1.1 – April 2025")
