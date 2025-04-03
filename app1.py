@@ -57,14 +57,14 @@ FINAL_COLUMNS = [
 
 COLUMN_MAPPING = {
     "date": "Lead Date", "lead date": "Lead Date", "submission date": "Lead Date",
-    "ssn": "SSN", "social": "SSN",
-    "dob": "DOB", "birth date": "DOB",
-    "ein": "EIN", "employer id": "EIN",
-    "business start date": "Business Start Date", "start date": "Business Start Date",
+    "ssn": "SSN", "social": "SSN", "social security": "SSN", "ss number": "SSN",
+    "dob": "DOB", "birth date": "DOB", "date of birth": "DOB",
+    "ein": "EIN", "employer id": "EIN", "employer identification": "EIN",
+    "business start date": "Business Start Date", "start date": "Business Start Date", "start": "Business Start Date",
     "monthly revenue": "Monthly Revenue", "rev": "Monthly Revenue", "revenue": "Monthly Revenue", "turnover": "Monthly Revenue",
-    "biz name": "Business Name", "businessname": "Business Name", "company": "Business Name", "business name": "Business Name",
-    "ownerfullname": "Full Name", "firstname": "First Name", "lastname": "Last Name",
-    "address": "Address", "city": "City", "state": "State", "zip": "Zip",
+    "biz name": "Business Name", "businessname": "Business Name", "company": "Business Name", "business name": "Business Name", "company name": "Business Name",
+    "ownerfullname": "Full Name", "firstname": "First Name", "last name": "Last Name", "first name": "First Name", "lastname": "Last Name", "name": "Name",
+    "address": "Address", "city": "City", "state": "State", "zip": "Zip", "zipcode": "Zip",
     "owner address": "Owner Address", "owner city": "Owner City", "owner state": "Owner State", "owner zip": "Owner Zip",
     "business address street,city,state,zip": "Address",
     "industry": "Industry"
@@ -99,7 +99,6 @@ def process_file(uploaded_file):
         df = pd.read_excel(uploaded_file, dtype=str).fillna("")
 
     df.columns = [normalize_column_name(col) for col in df.columns]
-
     df.columns = [col.strip() for col in df.columns]
     col_lower_map = {col.lower(): col for col in df.columns}
 
@@ -108,6 +107,8 @@ def process_file(uploaded_file):
 
     if first_col and last_col:
         df["Full Name"] = (df[first_col].fillna("") + " " + df[last_col].fillna(" ")).str.title()
+    elif "name" in df.columns and "Full Name" not in df.columns:
+        df["Full Name"] = df["name"].apply(str).str.title()
     else:
         df["Full Name"] = df.get("Full Name", "")
 
@@ -177,4 +178,4 @@ if uploaded_file:
         st.error(f"Error during processing: {str(e)}")
 
 st.markdown("<hr style='margin-top:50px;'>", unsafe_allow_html=True)
-st.caption("CAPNOW Data Cleaner v1.0 – April 2025")
+st.caption("CAPNOW Data Cleaner v1.1 – April 2025")
