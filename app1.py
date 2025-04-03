@@ -26,28 +26,29 @@ def check_password():
 if not check_password():
     st.stop()
 
+# -------------------- CONFIG --------------------
 st.set_page_config(page_title="CAPNOW DATA CLEANER APP")
 st.image("logo.png", width=160)
 st.title("CAPNOW DATA CLEANER APP")
 st.markdown("**Creator: Jaco Simkin – Director of Data Analysis**")
 
 st.markdown("""
-This app automatically cleans raw lead files (CSV or Excel format) received from multiple providers.
-
+This app automatically cleans raw lead files (CSV or Excel format) received from multiple providers.  
 It standardizes messy or inconsistent data into a unified format required by the CAPNOW HUB system.
 
 What it does:
-- Automatically detects phone and email columns by structure (e.g., @ for emails, 10-digit for phones)
-- Normalizes messy columns like `biz name`, `googlephone`, `revenue`, `turnover`, etc.
-- Outputs a clean DataFrame with the following columns:
+- Automatically detects phone and email columns based on structure
+- Normalizes messy column names (like `biz name`, `turnover`, etc.)
+- Outputs a cleaned file with the following columns:
 
-Lead Date, Business Name, Full Name, SSN, DOB, Industry, EIN  
-Business Start Date, Phone 1, Phone 2, Email 1, Email 2  
-Business Address, Home Address, Monthly Revenue
+**Lead Date, Business Name, Full Name, SSN, DOB, Industry, EIN**  
+**Business Start Date, Phone 1, Phone 2, Email 1, Email 2**  
+**Business Address, Home Address, Monthly Revenue**
 
-Second Table (Red): The second DataFrame (highlighted in red) shows all columns from the uploaded file that were not recognized or cleaned.
+**Second Table (Red):** Shows all columns that were not recognized or cleaned so you can review extra info.
 """)
 
+# -------------------- CONSTANTS --------------------
 FINAL_COLUMNS = [
     "Lead Date", "Business Name", "Full Name", "SSN", "DOB", "Industry", "EIN",
     "Business Start Date", "Phone 1", "Phone 2", "Email 1", "Email 2",
@@ -67,6 +68,7 @@ COLUMN_MAPPING = {
     "owner address": "Owner Address", "owner city": "Owner City", "owner state": "Owner State", "owner zip": "Owner Zip"
 }
 
+# -------------------- HELPERS --------------------
 def normalize_column_name(col):
     col = str(col).lower().replace(".", "").replace("_", " ").strip()
     col = re.sub(r"\s+", " ", col)
@@ -92,6 +94,7 @@ def clean_date(val):
     except:
         return ""
 
+# -------------------- MAIN CLEANER --------------------
 def process_file(uploaded_file):
     file_ext = uploaded_file.name.split(".")[-1].lower()
     base_filename = os.path.splitext(uploaded_file.name)[0]
@@ -101,29 +104,35 @@ def process_file(uploaded_file):
     else:
         df = pd.read_excel(uploaded_file, dtype=str).fillna("")
 
-    # Fix duplicate column headers
-    df.columns = pd.io.parsers.ParserBase({'names': df.columns})._maybe_dedup_names(df.columns)
+    # Clean headers
+    df.columns = pd.Series(df.columns).astype(str)
+    df = df.loc[:, ~df.columns.duplicated()]
     df.columns = [normalize_column_name(col) for col in df.columns]
 
+    # Full Name logic
     first = df.get("First Name", pd.Series([""] * len(df)))
     last = df.get("Last Name", pd.Series([""] * len(df)))
     full = df.get("Full Name", pd.Series([""] * len(df)))
     df["Full Name"] = full.where(full.str.strip() != "", first.fillna("") + " " + last.fillna(""))
 
+    # Phones
     phone_candidates = [col for col in df.columns if is_phone_series(df[col])]
     df["Phone 1"] = df[phone_candidates[0]].apply(format_phone) if len(phone_candidates) > 0 else ""
     df["Phone 2"] = df[phone_candidates[1]].apply(format_phone) if len(phone_candidates) > 1 else ""
 
+    # Emails
     email_candidates = [col for col in df.columns if is_email_series(df[col])]
     df["Email 1"] = df[email_candidates[0]] if len(email_candidates) > 0 else ""
     df["Email 2"] = df[email_candidates[1]] if len(email_candidates) > 1 else ""
 
+    # Addresses
     df["Business Address"] = df.get("Address", "") + ", " + df.get("City", "") + ", " + df.get("State", "") + " " + df.get("Zip", "")
     df["Home Address"] = df.get("Owner Address", "") + ", " + df.get("Owner City", "") + ", " + df.get("Owner State", "") + " " + df.get("Owner Zip", "")
 
     if "Lead Date" in df.columns:
         df["Lead Date"] = df["Lead Date"].apply(clean_date)
 
+    # Final cleaned DataFrame
     cleaned = pd.DataFrame()
     for col in FINAL_COLUMNS:
         if col in df.columns:
@@ -142,6 +151,7 @@ def process_file(uploaded_file):
 
     return cleaned, untouched, summary, base_filename
 
+# -------------------- UI --------------------
 uploaded_file = st.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx"])
 
 if uploaded_file:
@@ -169,5 +179,4 @@ if uploaded_file:
     except Exception as e:
         st.error(f"Error during processing: {str(e)}")
 
-st.markdown("<hr style='margin-top:50px;'>", unsafe_allow_html=True)
 st.caption("CAPNOW Data Cleaner v1.0 – April 2025")
