@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import re
+from datetime import datetime
 
 # -------------------- PASSWORD PROTECTION --------------------
 def check_password():
@@ -33,15 +34,16 @@ st.title("CAPNOW DATA CLEANER APP")
 st.markdown("**Creator: Jaco Simkin – Director of Data Analysis**")
 
 st.markdown("""
-This app automatically cleans raw lead files (CSV or XLSX format) received from multiple providers.
+This app automatically cleans raw lead files (CSV or Excel format) received from multiple providers.
 
 It standardizes messy or inconsistent data into a unified format required by the CAPNOW HUB system.
 
 What it does:
 - Normalizes messy columns like `biz name`, `googlephone`, `revenue`, etc.
+- Handles various formats for lead dates like `date`, `lead date`, `submission date`
 - Outputs a clean DataFrame with the following columns:
 
-Business Name, Full Name, SSN, DOB, Industry, EIN  
+Lead Date, Business Name, Full Name, SSN, DOB, Industry, EIN  
 Business Start Date, Phone 1, Phone 2, Email 1, Email 2  
 Business Address, Home Address, Monthly Revenue
 
@@ -51,13 +53,14 @@ You can use this to see what additional data was present but not part of the HUB
 
 # HUB columns
 FINAL_COLUMNS = [
-    "Business Name", "Full Name", "SSN", "DOB", "Industry", "EIN",
+    "Lead Date", "Business Name", "Full Name", "SSN", "DOB", "Industry", "EIN",
     "Business Start Date", "Phone 1", "Phone 2", "Email 1", "Email 2",
     "Business Address", "Home Address", "Monthly Revenue"
 ]
 
 # Flexible mappings
 COLUMN_MAPPING = {
+    "date": "Lead Date", "lead date": "Lead Date", "submission date": "Lead Date",
     "ssn": "SSN", "social": "SSN", "social security": "SSN", "socialsecurity": "SSN",
     "dob": "DOB", "birth date": "DOB", "date of birth": "DOB",
     "ein": "EIN", "employer id": "EIN",
@@ -90,6 +93,12 @@ def clean_text(val):
     val = str(val)
     return re.sub(r"\s+", " ", val.replace(",", "")).strip() if val.lower() != "nan" else ""
 
+def clean_date(val):
+    try:
+        return pd.to_datetime(val, errors="coerce").strftime("%m/%d/%Y")
+    except:
+        return ""
+
 # Main cleaner
 def process_file(uploaded_file):
     if uploaded_file.name.endswith(".csv"):
@@ -100,36 +109,46 @@ def process_file(uploaded_file):
     df.columns = [normalize_column_name(col) for col in df.columns]
 
     if "Full Name" not in df.columns:
-        df["Full Name"] = (
-            df.get("First Name", [""] * len(df)) + " " + df.get("Last Name", [""] * len(df))
-        ).str.strip()
+        first = df.get("First Name", pd.Series([""] * len(df)))
+        last = df.get("Last Name", pd.Series([""] * len(df)))
+        df["Full Name"] = (first + " " + last).str.strip()
 
     phone_cols = [col for col in df.columns if col.lower().startswith("phone")]
-    phones_df = df[phone_cols].applymap(format_phone) if phone_cols else pd.DataFrame([[""] * len(df)]).T
-    phone_flat = phones_df.apply(lambda row: list(dict.fromkeys([v for v in row if v])), axis=1)
-    df["Phone 1"] = phone_flat.apply(lambda x: x[0] if len(x) > 0 else "")
-    df["Phone 2"] = phone_flat.apply(lambda x: x[1] if len(x) > 1 else "")
+    if phone_cols:
+        phones_df = df[phone_cols].applymap(format_phone)
+        phone_flat = phones_df.apply(lambda row: list(dict.fromkeys([v for v in row if v])), axis=1)
+        df["Phone 1"] = phone_flat.apply(lambda x: x[0] if len(x) > 0 else "")
+        df["Phone 2"] = phone_flat.apply(lambda x: x[1] if len(x) > 1 else "")
+    else:
+        df["Phone 1"] = ""
+        df["Phone 2"] = ""
 
-    df["Email 1"] = df.get("Email A", [""] * len(df))
-    df["Email 2"] = df.get("Email B", [""] * len(df))
+    df["Email 1"] = df.get("Email A", pd.Series([""] * len(df)))
+    df["Email 2"] = df.get("Email B", pd.Series([""] * len(df)))
 
     df["Business Address"] = (
-        df.get("Address", [""] * len(df)) + ", " +
-        df.get("City", [""] * len(df)) + ", " +
-        df.get("State", [""] * len(df)) + " " +
-        df.get("Zip", [""] * len(df))
+        df.get("Address", pd.Series([""] * len(df))) + ", " +
+        df.get("City", pd.Series([""] * len(df))) + ", " +
+        df.get("State", pd.Series([""] * len(df))) + " " +
+        df.get("Zip", pd.Series([""] * len(df)))
     )
 
     df["Home Address"] = (
-        df.get("Owner Address", [""] * len(df)) + ", " +
-        df.get("Owner City", [""] * len(df)) + ", " +
-        df.get("Owner State", [""] * len(df)) + " " +
-        df.get("Owner Zip", [""] * len(df))
+        df.get("Owner Address", pd.Series([""] * len(df))) + ", " +
+        df.get("Owner City", pd.Series([""] * len(df))) + ", " +
+        df.get("Owner State", pd.Series([""] * len(df))) + " " +
+        df.get("Owner Zip", pd.Series([""] * len(df)))
     )
+
+    if "Lead Date" in df.columns:
+        df["Lead Date"] = df["Lead Date"].apply(clean_date)
 
     cleaned = pd.DataFrame()
     for col in FINAL_COLUMNS:
-        cleaned[col] = df[col].apply(clean_text) if col in df.columns else [""] * len(df)
+        if col in df.columns:
+            cleaned[col] = df[col].apply(clean_text)
+        else:
+            cleaned[col] = [""] * len(df)
 
     untouched_cols = [col for col in df.columns if col not in FINAL_COLUMNS]
     untouched = df[untouched_cols] if untouched_cols else pd.DataFrame()
