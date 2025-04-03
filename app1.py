@@ -50,45 +50,48 @@ Phone 1, Phone 2, Email 1, Email 2, Business Address
 Shows all columns from your upload that were **not recognized or cleaned**, so you can review extra info.
 """)
 
-# Standard HUB columns
 FINAL_COLUMNS = [
     "Lead Date", "Business Name", "Full Name", "SSN", "DOB", "Industry", "EIN",
     "Business Start Date", "Phone 1", "Phone 2", "Email 1", "Email 2", "Business Address"
 ]
 
-# Extended dictionary for messy headers
 COLUMN_MAPPING = {
     # SSN
     "ssn": "SSN", "social": "SSN", "social security": "SSN", "socialsecurity": "SSN",
 
     # DOB
-    "dob": "DOB", "birth date": "DOB", "date of birth": "DOB",
+    "dob": "DOB", "birth date": "DOB", "date of birth": "DOB", "birthdate": "DOB",
 
     # EIN
-    "ein": "EIN", "employer id": "EIN",
+    "ein": "EIN", "employer id": "EIN", "federal id": "EIN",
 
     # Business Start Date
     "business start date": "Business Start Date", "start date": "Business Start Date", "bsd": "Business Start Date", "yearsinbusiness": "Business Start Date",
 
     # Revenue
-    "monthly revenue": "Monthly Revenue", "revenue": "Monthly Revenue", "turnover": "Monthly Revenue",
+    "monthly revenue": "Monthly Revenue", "revenue": "Monthly Revenue", "turnover": "Monthly Revenue", "income": "Monthly Revenue", "sales": "Monthly Revenue",
 
     # Business Name
-    "biz name": "Business Name", "businessname": "Business Name", "company": "Business Name", "business": "Business Name",
+    "biz name": "Business Name", "businessname": "Business Name", "company": "Business Name", "business": "Business Name", "company name": "Business Name",
 
     # Full Name / First + Last
-    "name": "Full Name", "full name": "Full Name", "firstname": "First Name", "first name": "First Name",
-    "lastname": "Last Name", "last name": "Last Name",
+    "name": "Full Name", "full name": "Full Name", "contact name": "Full Name",
+    "firstname": "First Name", "first name": "First Name", "given name": "First Name",
+    "lastname": "Last Name", "last name": "Last Name", "surname": "Last Name",
 
     # Phones
-    "phone": "Phone", "phone number": "Phone", "cellphone": "Phone", "mobile": "Phone",
+    "phone": "Phone", "phone number": "Phone", "cellphone": "Phone", "mobile": "Phone", "cell": "Phone", "tlo phone 1": "Phone", "tlo phone 2": "Phone", "contact number": "Phone",
 
     # Emails
-    "email": "Email", "email address": "Email",
+    "email": "Email", "email address": "Email", "tlo email 1": "Email", "tlo email 2": "Email", "google email": "Email", "e-mail": "Email",
 
     # Address
-    "address": "Address", "city": "City", "state": "State", "zip": "Zip",
-    "street": "Street", "business address": "Address", "business address street": "Street"
+    "address": "Address", "city": "City", "state": "State", "zip": "Zip", "zipcode": "Zip",
+    "street": "Street", "business address": "Address", "business address full": "Address",
+    "business address street,city,state,zip": "Address", "business address street": "Street",
+
+    # Industry
+    "industry": "Industry", "sector": "Industry", "line of business": "Industry"
 }
 
 # Helpers
@@ -100,14 +103,15 @@ def guess_phone_columns(df):
     return phone_cols[:2] if len(phone_cols) >= 2 else phone_cols + [""]
 
 def guess_email_columns(df):
-    email_cols = [c for c in df.columns if "email" in c]
+    email_cols = [c for c in df.columns if "@" in str(df[c].iloc[0]) or "email" in c]
     return email_cols[:2] if len(email_cols) >= 2 else email_cols + [""]
 
 def build_full_name(df):
-    if "full name" not in df.columns:
-        if "first name" in df.columns and "last name" in df.columns:
-            return df["first name"].astype(str).str.strip() + " " + df["last name"].astype(str).str.strip()
-    return df.get("full name", pd.Series(["" for _ in range(len(df))]))
+    if "Full Name" in df.columns:
+        return df["Full Name"]
+    elif "First Name" in df.columns and "Last Name" in df.columns:
+        return df["First Name"].astype(str).str.strip() + " " + df["Last Name"].astype(str).str.strip()
+    return pd.Series(["" for _ in range(len(df))])
 
 def clean_text(val):
     if pd.isna(val): return ""
@@ -121,12 +125,8 @@ def process_file(uploaded_file):
     ext = os.path.splitext(uploaded_file.name)[1].lower()
     df = pd.read_csv(uploaded_file) if ext == ".csv" else pd.read_excel(uploaded_file)
 
-    # Normalize headers
-    col_lower_map = {col: normalize_column_name(col) for col in df.columns}
-    df.rename(columns=col_lower_map, inplace=True)
-
-    # Map known headers
-    df.columns = [COLUMN_MAPPING.get(col, col) for col in df.columns]
+    df.columns = [col.lower().strip().replace("  ", " ").replace("\n", " ") for col in df.columns]
+    df.rename(columns=lambda c: COLUMN_MAPPING.get(c.strip().lower(), c.strip().title()), inplace=True)
 
     df["Full Name"] = build_full_name(df)
 
@@ -138,9 +138,7 @@ def process_file(uploaded_file):
     df["Email 1"] = df[email_cols[0]] if email_cols[0] in df.columns else ""
     df["Email 2"] = df[email_cols[1]] if email_cols[1] in df.columns else ""
 
-    # Combine address fields
     df["Business Address"] = df.get("Street", "") + ", " + df.get("City", "") + ", " + df.get("State", "") + " " + df.get("Zip", "")
-
     df["Lead Date"] = datetime.today().strftime("%m/%d/%Y")
 
     cleaned = pd.DataFrame({col: df[col].apply(clean_text) if col in df.columns else "" for col in FINAL_COLUMNS})
