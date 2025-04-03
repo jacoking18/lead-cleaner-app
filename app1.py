@@ -99,8 +99,8 @@ def process_file(uploaded_file):
         df = pd.read_excel(uploaded_file, dtype=str).fillna("")
 
     df.columns = [normalize_column_name(col) for col in df.columns]
-    df.columns = [col.strip() for col in df.columns]
-    col_lower_map = {col.lower(): col for col in df.columns}
+    df.columns = [col.strip().lower() for col in df.columns]  # Clean title casing and spacing
+    col_lower_map = {col.lower().strip(): col for col in df.columns]
 
     first_col = col_lower_map.get("first name")
     last_col = col_lower_map.get("last name")
@@ -120,26 +120,27 @@ def process_file(uploaded_file):
     df["Email 1"] = df[email_candidates[0]] if len(email_candidates) > 0 else ""
     df["Email 2"] = df[email_candidates[1]] if len(email_candidates) > 1 else ""
 
-    if "Address" not in df.columns and any("address" in c for c in df.columns):
+    if "address" not in df.columns and any("address" in c for c in df.columns):
         for c in df.columns:
             if "address" in c and "," in df[c].iloc[0]:
-                df["Address"] = df[c]
+                df["address"] = df[c]
 
-    df["Business Address"] = df.get("Address", "") + ", " + df.get("City", "") + ", " + df.get("State", "") + " " + df.get("Zip", "")
-    df["Home Address"] = df.get("Owner Address", "") + ", " + df.get("Owner City", "") + ", " + df.get("Owner State", "") + " " + df.get("Owner Zip", "")
+    df["Business Address"] = df.get("address", "") + ", " + df.get("city", "") + ", " + df.get("state", "") + " " + df.get("zip", "")
+    df["Home Address"] = df.get("owner address", "") + ", " + df.get("owner city", "") + ", " + df.get("owner state", "") + " " + df.get("owner zip", "")
 
-    if "Lead Date" in df.columns:
-        df["Lead Date"] = pd.to_datetime(df["Lead Date"], errors="coerce").dt.strftime("%m/%d/%Y")
-        df["Lead Date"] = df["Lead Date"].fillna("")
+    if "lead date" in df.columns:
+        df["lead date"] = pd.to_datetime(df["lead date"], errors="coerce").dt.strftime("%m/%d/%Y")
+        df["lead date"] = df["lead date"].fillna("")
 
     cleaned = pd.DataFrame()
     for col in FINAL_COLUMNS:
-        if col in df.columns:
-            cleaned[col] = df[col].apply(clean_text)
+        key = col.lower()
+        if key in df.columns:
+            cleaned[col] = df[key].apply(clean_text)
         else:
             cleaned[col] = [""] * len(df)
 
-    untouched_cols = [col for col in df.columns if col not in FINAL_COLUMNS]
+    untouched_cols = [col for col in df.columns if col.title() not in FINAL_COLUMNS]
     untouched = df[untouched_cols] if untouched_cols else pd.DataFrame()
 
     summary = (
