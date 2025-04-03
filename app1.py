@@ -26,7 +26,6 @@ def check_password():
 if not check_password():
     st.stop()
 
-# -------------------- APP LAYOUT --------------------
 st.set_page_config(page_title="CAPNOW DATA CLEANER APP")
 st.image("logo.png", width=160)
 st.title("CAPNOW DATA CLEANER APP")
@@ -37,19 +36,18 @@ This app automatically cleans raw lead files (CSV or Excel format) received from
 
 It standardizes messy or inconsistent data into a unified format required by the CAPNOW HUB system.
 
-**What it does:**
-- Detects phone and email columns by format (e.g., @ in emails, 10-digit for phones)
-- Normalizes columns like `biz name`, `googlephone`, `revenue`, `turnover`, etc.
-- Outputs a cleaned file with columns:
-  - Lead Date, Business Name, Full Name, SSN, DOB, Industry, EIN  
-  - Business Start Date, Phone 1, Phone 2, Email 1, Email 2  
-  - Business Address, Home Address, Monthly Revenue
+What it does:
+- Automatically detects phone and email columns by structure (e.g., @ for emails, 10-digit for phones)
+- Normalizes messy columns like `biz name`, `googlephone`, `revenue`, `turnover`, etc.
+- Outputs a clean DataFrame with the following columns:
 
-**Second Table (Red):**  
-Shows all columns from your upload that were **not recognized or cleaned**, so you can review extra info.
+Lead Date, Business Name, Full Name, SSN, DOB, Industry, EIN  
+Business Start Date, Phone 1, Phone 2, Email 1, Email 2  
+Business Address, Home Address, Monthly Revenue
+
+Second Table (Red): The second DataFrame (highlighted in red) shows all columns from the uploaded file that were not recognized or cleaned.
 """)
 
-# -------------------- SETUP --------------------
 FINAL_COLUMNS = [
     "Lead Date", "Business Name", "Full Name", "SSN", "DOB", "Industry", "EIN",
     "Business Start Date", "Phone 1", "Phone 2", "Email 1", "Email 2",
@@ -59,18 +57,16 @@ FINAL_COLUMNS = [
 COLUMN_MAPPING = {
     "date": "Lead Date", "lead date": "Lead Date", "submission date": "Lead Date",
     "ssn": "SSN", "social": "SSN",
-    "dob": "DOB", "birth date": "DOB", "date of birth": "DOB",
+    "dob": "DOB", "birth date": "DOB",
     "ein": "EIN", "employer id": "EIN",
-    "business start date": "Business Start Date", "start date": "Business Start Date", "bsd": "Business Start Date",
+    "business start date": "Business Start Date", "start date": "Business Start Date",
     "monthly revenue": "Monthly Revenue", "rev": "Monthly Revenue", "revenue": "Monthly Revenue", "turnover": "Monthly Revenue",
-    "biz name": "Business Name", "businessname": "Business Name", "company name": "Business Name", "business name": "Business Name", "dba": "Business Name",
-    "ownerfullname": "Full Name", "firstname": "First Name", "first name": "First Name",
-    "lastname": "Last Name", "last name": "Last Name",
-    "address": "Address", "address1": "Address", "city": "City", "state": "State", "zip": "Zip",
+    "biz name": "Business Name", "businessname": "Business Name", "company": "Business Name", "business name": "Business Name",
+    "ownerfullname": "Full Name", "firstname": "First Name", "lastname": "Last Name",
+    "address": "Address", "city": "City", "state": "State", "zip": "Zip",
     "owner address": "Owner Address", "owner city": "Owner City", "owner state": "Owner State", "owner zip": "Owner Zip"
 }
 
-# -------------------- HELPERS --------------------
 def normalize_column_name(col):
     col = str(col).lower().replace(".", "").replace("_", " ").strip()
     col = re.sub(r"\s+", " ", col)
@@ -92,12 +88,10 @@ def clean_text(val):
 
 def clean_date(val):
     try:
-        parsed = pd.to_datetime(val, errors="coerce")
-        return parsed.strftime("%m/%d/%Y") if not pd.isnull(parsed) else ""
+        return pd.to_datetime(val, errors="coerce").strftime("%m/%d/%Y")
     except:
         return ""
 
-# -------------------- CLEANING ENGINE --------------------
 def process_file(uploaded_file):
     file_ext = uploaded_file.name.split(".")[-1].lower()
     base_filename = os.path.splitext(uploaded_file.name)[0]
@@ -107,6 +101,8 @@ def process_file(uploaded_file):
     else:
         df = pd.read_excel(uploaded_file, dtype=str).fillna("")
 
+    # Fix duplicate column headers
+    df.columns = pd.io.parsers.ParserBase({'names': df.columns})._maybe_dedup_names(df.columns)
     df.columns = [normalize_column_name(col) for col in df.columns]
 
     first = df.get("First Name", pd.Series([""] * len(df)))
@@ -130,15 +126,22 @@ def process_file(uploaded_file):
 
     cleaned = pd.DataFrame()
     for col in FINAL_COLUMNS:
-        cleaned[col] = df[col].apply(clean_text) if col in df.columns else ""
+        if col in df.columns:
+            cleaned[col] = df[col].apply(clean_text)
+        else:
+            cleaned[col] = [""] * len(df)
 
     untouched_cols = [col for col in df.columns if col not in FINAL_COLUMNS]
     untouched = df[untouched_cols] if untouched_cols else pd.DataFrame()
 
-    summary = f"Cleaned rows: {len(df)}\nStandard columns: {len(FINAL_COLUMNS)}\nUnrecognized columns: {len(untouched_cols)}"
+    summary = (
+        f"Cleaned rows: {len(df)}\n"
+        f"Standard columns: {len(FINAL_COLUMNS)}\n"
+        f"Unrecognized columns: {len(untouched_cols)}"
+    )
+
     return cleaned, untouched, summary, base_filename
 
-# -------------------- APP --------------------
 uploaded_file = st.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx"])
 
 if uploaded_file:
