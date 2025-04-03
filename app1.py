@@ -1,4 +1,4 @@
-""import streamlit as st
+import streamlit as st
 import pandas as pd
 import re
 from datetime import datetime
@@ -26,6 +26,7 @@ def check_password():
 if not check_password():
     st.stop()
 
+# -------------------- PAGE SETUP --------------------
 st.set_page_config(page_title="CAPNOW DATA CLEANER APP")
 st.image("logo.png", width=160)
 st.title("CAPNOW DATA CLEANER APP")
@@ -36,7 +37,7 @@ This app automatically cleans raw lead files (CSV or Excel format) received from
 
 It standardizes messy or inconsistent data into a unified format required by the CAPNOW HUB system.
 
-What it does:
+**What it does:**
 - Automatically detects phone and email columns by structure (e.g., @ for emails, 10-digit for phones)
 - Normalizes messy columns like `biz name`, `googlephone`, `revenue`, `turnover`, etc.
 - Outputs a clean DataFrame with the following columns:
@@ -45,9 +46,10 @@ Lead Date, Business Name, Full Name, SSN, DOB, Industry, EIN
 Business Start Date, Phone 1, Phone 2, Email 1, Email 2  
 Business Address, Home Address, Monthly Revenue
 
-Second Table (Red): The second DataFrame (highlighted in red) shows all columns from the uploaded file that were not recognized or cleaned.
+**Second Table (Red):** Shows all columns from the uploaded file that were not recognized or cleaned.
 """)
 
+# -------------------- CLEANING LOGIC --------------------
 FINAL_COLUMNS = [
     "Lead Date", "Business Name", "Full Name", "SSN", "DOB", "Industry", "EIN",
     "Business Start Date", "Phone 1", "Phone 2", "Email 1", "Email 2",
@@ -140,6 +142,7 @@ def process_file(uploaded_file):
 
     return cleaned, untouched, summary, base_filename
 
+# -------------------- UI --------------------
 uploaded_file = st.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx"])
 
 if uploaded_file:
