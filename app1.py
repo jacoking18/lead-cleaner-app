@@ -57,24 +57,28 @@ def build_full_name(df):
 def extract_business_name(df):
     for col in df.columns:
         if df[col].astype(str).str.contains(r'\b(llc|inc|co|corp|ltd)\b', flags=re.IGNORECASE).sum() > 2:
-            return df[col]
+            # Check that the values don't mostly contain dates
+            date_matches = df[col].astype(str).str.contains(r'\d{1,2}[/-]\d{1,2}[/-]\d{2,4}')
+            if date_matches.sum() < len(df) * 0.3:
+                return df[col]
     name = next((col for col in df.columns if any(k in col for k in ['business', 'company', 'dba'])), None)
     return df[name] if name else ""
 
 def classify_date_columns(df):
     candidates = []
+    bsd_col, dob_col = None, None
     for col in df.columns:
         try:
             series = pd.to_datetime(df[col], errors='coerce')
             if series.notna().sum() > 2:
                 recent = (datetime.today() - series).dt.days < (365 * 10)
                 if recent.sum() > 2:
-                    return col, None
+                    bsd_col = col
                 else:
-                    return None, col
+                    dob_col = col
         except:
             continue
-    return None, None
+    return bsd_col, dob_col
 
 def combine_address(df):
     address_cols = [col for col in df.columns if any(k in col for k in ['address', 'street', 'city', 'zip', 'state'])]
@@ -91,20 +95,21 @@ def clean_dataframe(df):
     df.columns = normalize_headers(df.columns)
 
     # Filter out irrelevant columns like folder/file references
-    ignore_keywords = ['folder', 'file location', 'pdf', 'storage']
-    df = df[[col for col in df.columns if not any(key in col.lower() for key in ignore_keywords)]]
+    ignore_keywords = ['folder', 'filelocation', 'pdflink', 'filepath', 'storage']
+    df = df[[col for col in df.columns if not any(key in col for key in ignore_keywords)]]
 
     output = pd.DataFrame()
 
-    # Lead Date
+    # Lead Date logic (only if first col contains dates)
     try:
-        first_col = pd.to_datetime(df.iloc[:, 0], errors='coerce')
-        if first_col.notna().sum() > 2:
-            output["Lead Date"] = first_col.dt.strftime("%m/%d/%Y")
+        first_col_vals = df.iloc[:, 0]
+        parsed_first = pd.to_datetime(first_col_vals, errors='coerce')
+        if parsed_first.notna().sum() > 2:
+            output["Lead Date"] = parsed_first.dt.strftime("%m/%d/%Y")
         else:
-            output["Lead Date"] = datetime.today().strftime("%m/%d/%Y")
+            output["Lead Date"] = ""
     except:
-        output["Lead Date"] = datetime.today().strftime("%m/%d/%Y")
+        output["Lead Date"] = ""
 
     output["Business Name"] = extract_business_name(df)
     output["Full Name"] = build_full_name(df)
@@ -112,8 +117,8 @@ def clean_dataframe(df):
     output["EIN"] = df.get(guess_by_regex(df, r"^\d{2}-\d{7}$"), "")
 
     bsd_col, dob_col = classify_date_columns(df)
-    output["Business Start Date"] = df.get(bsd_col, "")
-    output["DOB"] = df.get(dob_col, "")
+    output["Business Start Date"] = df[bsd_col] if bsd_col and bsd_col not in df.columns[:1].tolist() else ""
+    output["DOB"] = df[dob_col] if dob_col else ""
 
     output["Industry"] = df.get(next((c for c in df.columns if 'industry' in c or 'sector' in c), ''), '')
 
