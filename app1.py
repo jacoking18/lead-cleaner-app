@@ -42,10 +42,6 @@ It smartly detects and matches fields like Full Name, SSN, Phone, Revenue, and m
 - The final result is downloadable as: `originalfilename_cleaned.csv`.
 """)
 
-st.set_page_config(page_title="CAPNOW DATA CLEANER APP")
-st.title("CAPNOW DATA CLEANER APP")
-st.markdown("**Creator: Jaco Simkin – Director of Data Analysis**")
-
 FINAL_COLUMNS = [
     "Lead Date", "Business Name", "Full Name", "SSN", "DOB", "Industry", "EIN",
     "Business Start Date", "Phone 1", "Phone 2", "Phone 3", "Email 1", "Email 2",
@@ -53,169 +49,127 @@ FINAL_COLUMNS = [
 ]
 
 FIELD_ALIASES = {
-    "first_name": ["firstname", "first name", "fname", "applicantfirstname"],
-    "last_name": ["lastname", "last name", "lname", "applicantlastname"],
-    "full_name": ["fullname", "contactname", "applicantname", "name", "borrowername", "clientname"],
-    "ssn": ["ssn", "social", "socialsecurity", "socialsecuritynumber"],
-    "ein": ["ein", "taxid", "tax id", "fein", "federalid", "business taxid"],
+    "first_name": ["firstname", "first name", "fname", "applicantfirstname", "givenname"],
+    "last_name": ["lastname", "last name", "lname", "applicantlastname", "surname"],
+    "full_name": ["fullname", "contactname", "applicantname", "name", "borrowername", "clientname", "ownername"],
+    "ssn": ["ssn", "social", "socialsecurity", "socialsecuritynumber", "social sec"],
+    "ein": ["ein", "taxid", "tax id", "fein", "federalid", "business taxid", "employer id"],
     "dob": ["dob", "birthdate", "dateofbirth", "birth", "d.o.b", "applicantdob"],
     "business_name": ["businessname", "company", "companyname", "organization", "bizname", "dba", "employer", "legal business name"],
     "industry": ["industry", "sector", "business type", "business category", "natureofbusiness"],
-    "phone": ["phone", "cell", "mobile", "contact", "primary phone", "contact number", "number"],
+    "phone": ["phone", "cell", "mobile", "contact", "primary phone", "contact number", "number", "telephone"],
     "phone2": ["phone2", "cell2", "mobile2", "secondary phone", "alt phone"],
     "phone3": ["phone3", "cell3", "mobile3", "extra phone"],
-    "email": ["email", "email1", "gmail", "contact email", "googleemail", "applicantemail"],
+    "email": ["email", "email1", "gmail", "contact email", "googleemail", "applicantemail", "e-mail"],
     "email2": ["email2", "backupemail", "secondaryemail", "alt email"],
-    "revenue": ["monthly revenue", "revenue", "income", "turnover", "monthlyincome", "monthly gross", "gross revenue"],
+    "revenue": ["monthly revenue", "revenue", "income", "turnover", "monthlyincome", "monthly gross", "gross revenue", "grossmonthlyincome"],
     "address": ["address", "street", "city", "state", "zip", "zipcode", "mailing address", "business address", "home address", "location", "residential address"]
 }
 
-def normalize_headers(columns):
-    return [re.sub(r'[^a-z0-9]', '', col.lower().strip()) for col in columns]
+# -------------------- HELPERS --------------------
+def normalize(col):
+    return re.sub(r"[^a-z0-9]", "", str(col).lower().strip())
 
-def clean_text(val):
-    if pd.isna(val): return ""
-    return re.sub(r"\s+", " ", str(val).replace(",", "")).strip()
-
-def match_column(col_name, target_field):
-    col_name = re.sub(r'[^a-z0-9]', '', col_name.lower())
-    return any(alias.replace(" ", "") in col_name for alias in FIELD_ALIASES.get(target_field, []))
-
-def guess_by_regex(df, regex):
+def extract_by_keywords(df, keys):
     for col in df.columns:
-        if df[col].astype(str).apply(lambda x: bool(re.match(regex, x))).sum() > 2:
-            return col
-    return None
+        if normalize(col) in [normalize(k) for k in keys]:
+            return df[col]
+    return pd.Series([""] * len(df))
 
-def guess_by_contains(df, keyword):
-    return [col for col in df.columns if df[col].astype(str).str.contains(keyword, na=False).sum() > 2]
-
-def build_full_name(df):
-    first_col = next((c for c in df.columns if match_column(c, 'first_name')), None)
-    last_col = next((c for c in df.columns if match_column(c, 'last_name')), None)
-    if first_col and last_col:
-        return df[first_col].astype(str).str.strip() + ' ' + df[last_col].astype(str).str.strip()
-    name_col = next((c for c in df.columns if match_column(c, 'full_name')), None)
-    return df[name_col] if name_col else pd.Series(["" for _ in range(len(df))])
-
-def extract_business_name(df):
+def extract_phones(df):
+    phones = []
     for col in df.columns:
-        if df[col].astype(str).str.contains(r'\b(llc|inc|co|corp|ltd)\b', flags=re.IGNORECASE).sum() > 2:
-            date_matches = df[col].astype(str).str.contains(r'\d{1,2}[-/]\d{1,2}[-/]\d{2,4}')
-            if date_matches.sum() < len(df) * 0.3:
-                return df[col]
-    name = next((col for col in df.columns if match_column(col, 'business_name')), None)
-    return df[name] if name else ""
+        digits = df[col].astype(str).apply(lambda x: re.sub(r"\D", "", x))
+        valid = digits[digits.str.len() == 10]
+        if len(valid) > 0:
+            phones.append(valid)
+    phones = phones[:3] + [pd.Series([""] * len(df))] * (3 - len(phones))
+    return phones
 
-def classify_date_columns(df):
-    bsd_col, dob_col = None, None
-    max_old_ratio = 0
+def extract_emails(df):
+    emails = []
+    for col in df.columns:
+        matches = df[col].astype(str).str.contains(r"@")
+        if matches.any():
+            emails.append(df[col])
+    emails = emails[:2] + [pd.Series([""] * len(df))] * (2 - len(emails))
+    return emails
+
+def extract_dobs(df):
+    dob_candidates = []
     for col in df.columns:
         try:
-            series = pd.to_datetime(df[col].astype(str), errors='coerce')
-            valid_dates = series.dropna()
-            if valid_dates.shape[0] < 3:
-                continue
-            old_dates_ratio = (valid_dates.dt.year < 2000).sum() / len(valid_dates)
-            if old_dates_ratio > 0.6 and old_dates_ratio > max_old_ratio:
-                dob_col = col
-                max_old_ratio = old_dates_ratio
-            elif valid_dates.dt.year.between(2005, datetime.now().year).sum() > len(valid_dates) * 0.6 and col != df.columns[0]:
-                bsd_col = col
-        except Exception as e:
-            continue
-    return bsd_col, dob_col
+            dates = pd.to_datetime(df[col], errors='coerce')
+            if dates.notna().sum() > 0:
+                if (dates.dropna().dt.year < 2000).mean() > 0.5:
+                    dob_candidates.append(dates)
+        except: pass
+    return dob_candidates[0] if dob_candidates else pd.Series([""] * len(df))
 
-def combine_address(df):
-    address_cols = [col for col in df.columns if match_column(col, 'address')]
-    if address_cols:
-        return df[address_cols].astype(str).agg(" ".join, axis=1)
-    return ""
+def extract_bsd(df):
+    bsd_candidates = []
+    for col in df.columns:
+        try:
+            dates = pd.to_datetime(df[col], errors='coerce')
+            if dates.notna().sum() > 0:
+                if (dates.dropna().dt.year >= 2000).mean() > 0.5:
+                    bsd_candidates.append(dates)
+        except: pass
+    return bsd_candidates[0] if bsd_candidates else pd.Series([""] * len(df))
 
-def extract_phones_rowwise(df):
-    phone_pattern = re.compile(r"\(?\d{3}[\)\s.-]?\d{3}[\s.-]?\d{4}")
-    def get_phones(row):
-        matches = phone_pattern.findall(" ".join(row.values.astype(str)))
-        return (matches + ["", "", ""])[:3]  # Always return 3 values
-    phone_data = df.apply(get_phones, axis=1, result_type="expand")
-    phone_data.columns = ["Phone 1", "Phone 2", "Phone 3"]
-    return phone_data
-
-def format_phone(phone):
-    digits = re.sub(r"\D", "", str(phone))
-    return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}" if len(digits) == 10 else ""
-
-def clean_dataframe(df):
-    df.columns = normalize_headers(df.columns)
-    ignore_keywords = ['folder', 'filelocation', 'pdflink', 'filepath', 'storage']
-    df = df[[col for col in df.columns if not any(key in col for key in ignore_keywords)]]
-    output = pd.DataFrame()
-
+def extract_lead_date(df):
+    first_col = df.iloc[:, 0]
     try:
-        parsed_first = pd.to_datetime(df.iloc[:, 0], errors='coerce')
-        output["Lead Date"] = parsed_first.dt.strftime("%m/%d/%Y") if parsed_first.notna().sum() > 2 else ""
-    except:
-        output["Lead Date"] = ""
+        date_series = pd.to_datetime(first_col, errors='coerce')
+        if date_series.notna().sum() > 0 and (date_series.dropna().dt.year > 2000).mean() > 0.5:
+            return date_series
+    except: pass
+    return pd.Series([""] * len(df))
 
-    output["Business Name"] = extract_business_name(df)
-    output["Full Name"] = build_full_name(df)
+# -------------------- PROCESS --------------------
+uploaded_file = st.file_uploader("Upload your CSV or XLSX", type=["csv", "xlsx"])
 
-    ssn_col = next((c for c in df.columns if match_column(c, 'ssn')), None)
-    output["SSN"] = df.get(ssn_col, df.get(guess_by_regex(df, r"^\d{3}-\d{2}-\d{4}$"), ""))
-
-    ein_col = next((c for c in df.columns if match_column(c, 'ein')), None)
-    output["EIN"] = df.get(ein_col, df.get(guess_by_regex(df, r"^\d{2}-\d{7}$"), ""))
-
-    bsd_col, dob_col = classify_date_columns(df)
-    output["Business Start Date"] = df[bsd_col] if bsd_col else ""
-    if dob_col:
-        parsed_dob = pd.to_datetime(df[dob_col], errors='coerce')
-        output["DOB"] = parsed_dob.dt.strftime("%m/%d/%Y")
-    else:
-        dob_hint = next((c for c in df.columns if match_column(c, 'dob')), None)
-        parsed_dob = pd.to_datetime(df[dob_hint], errors='coerce') if dob_hint else None
-        output["DOB"] = parsed_dob.dt.strftime("%m/%d/%Y") if parsed_dob is not None else ""
-
-    industry_col = next((c for c in df.columns if match_column(c, 'industry')), None)
-    output["Industry"] = df.get(industry_col, '')
-
-    phones_df = extract_phones_rowwise(df).applymap(format_phone)
-    output["Phone 1"] = phones_df.get("Phone 1", "")
-    output["Phone 2"] = phones_df.get("Phone 2", "")
-    output["Phone 3"] = phones_df.get("Phone 3", "")
-
-    email_cols = guess_by_contains(df, "@")[0:2]
-    output["Email 1"] = df[email_cols[0]] if len(email_cols) > 0 else ""
-    output["Email 2"] = df[email_cols[1]] if len(email_cols) > 1 else ""
-
-    output["Business Address"] = combine_address(df)
-    output["Home Address"] = ""
-
-    rev_col = next((c for c in df.columns if match_column(c, 'revenue')), None)
-    output["Monthly Revenue"] = df.get(rev_col, "")
-
-    output = output[FINAL_COLUMNS].applymap(clean_text)
-    return output
-
-uploaded_file = st.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx"])
 if uploaded_file:
-    try:
-        ext = os.path.splitext(uploaded_file.name)[1].lower()
-        df = pd.read_csv(uploaded_file) if ext == ".csv" else pd.read_excel(uploaded_file)
-        cleaned_df = clean_dataframe(df)
-        st.success("Data cleaned successfully.")
-        st.markdown("### Cleaned CSV (Full Preview)")
-        st.dataframe(cleaned_df, use_container_width=True)
+    if uploaded_file.name.endswith('.csv'):
+        df = pd.read_csv(uploaded_file, dtype=str).fillna("")
+    else:
+        df = pd.read_excel(uploaded_file, dtype=str).fillna("")
 
-        st.markdown("### Original Uploaded CSV")
-        st.dataframe(df, use_container_width=True)
+    # Clean headers
+    df.columns = [str(c).strip() for c in df.columns]
 
-        filename = os.path.splitext(uploaded_file.name)[0] + "_cleaned.csv"
-        st.download_button(
-            label="Download Cleaned CSV",
-            data=cleaned_df.to_csv(index=False).encode("utf-8"),
-            file_name=filename,
-            mime="text/csv"
-        )
-    except Exception as e:
-        st.error(f"Error during processing: {str(e)}")
+    out = pd.DataFrame()
+
+    out["Lead Date"] = extract_lead_date(df)
+    out["Business Name"] = extract_by_keywords(df, FIELD_ALIASES["business_name"])
+    out["Full Name"] = (
+        extract_by_keywords(df, FIELD_ALIASES["first_name"]).astype(str) + " " +
+        extract_by_keywords(df, FIELD_ALIASES["last_name"]).astype(str)
+    ).str.strip()
+    out["SSN"] = extract_by_keywords(df, FIELD_ALIASES["ssn"])
+    out["DOB"] = extract_dobs(df).astype(str)
+    out["Industry"] = extract_by_keywords(df, FIELD_ALIASES["industry"])
+    out["EIN"] = extract_by_keywords(df, FIELD_ALIASES["ein"])
+    out["Business Start Date"] = extract_bsd(df).astype(str)
+
+    phones = extract_phones(df)
+    out["Phone 1"] = phones[0]
+    out["Phone 2"] = phones[1]
+    out["Phone 3"] = phones[2]
+
+    emails = extract_emails(df)
+    out["Email 1"] = emails[0]
+    out["Email 2"] = emails[1]
+
+    out["Business Address"] = extract_by_keywords(df, FIELD_ALIASES["address"])
+    out["Home Address"] = extract_by_keywords(df, ["home address", "residential address", "owner address"])
+    out["Monthly Revenue"] = extract_by_keywords(df, FIELD_ALIASES["revenue"])
+
+    st.subheader("Cleaned Output")
+    st.dataframe(out, use_container_width=True)
+
+    st.subheader("Original Uploaded File")
+    st.dataframe(df, use_container_width=True)
+
+    cleaned_filename = uploaded_file.name.replace(".csv", "").replace(".xlsx", "") + "_cleaned.csv"
+    st.download_button("Download Cleaned CSV", out.to_csv(index=False).encode("utf-8"), file_name=cleaned_filename)
