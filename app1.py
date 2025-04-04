@@ -81,6 +81,17 @@ def format_phone(phone):
     digits = re.sub(r"\D", "", str(phone))
     return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}" if len(digits) == 10 else ""
 
+def detect_phone_columns(df):
+    phone_candidates = []
+    for col in df.columns:
+        values = df[col].astype(str)
+        match_count = values.str.contains(r'\(?\d{3}[\)\s.-]?\d{3}[\s.-]?\d{4}', regex=True).sum()
+        if match_count >= 3:
+            phone_candidates.append(col)
+        if len(phone_candidates) >= 3:
+            break
+    return phone_candidates
+
 def clean_dataframe(df):
     df.columns = normalize_headers(df.columns)
     ignore_keywords = ['folder', 'filelocation', 'pdflink', 'filepath', 'storage']
@@ -114,13 +125,10 @@ def clean_dataframe(df):
 
     output["Industry"] = df.get(next((c for c in df.columns if 'industry' in c or 'sector' in c), ''), '')
 
-    possible_phone_cols = [col for col in df.columns if any(p in col for p in ['phone', 'cell', 'mobile', 'phonenumber', 'number'])]
-    pattern_matches = guess_by_contains(df, r'\(?\d{3}[\)\s.-]?\d{3}[\s.-]?\d{4}')
-    all_phone_cols = list(dict.fromkeys(possible_phone_cols + pattern_matches))[:3]
-
-    output["Phone 1"] = df[all_phone_cols[0]].apply(format_phone) if len(all_phone_cols) > 0 else ""
-    output["Phone 2"] = df[all_phone_cols[1]].apply(format_phone) if len(all_phone_cols) > 1 else ""
-    output["Phone 3"] = df[all_phone_cols[2]].apply(format_phone) if len(all_phone_cols) > 2 else ""
+    phone_cols = detect_phone_columns(df)
+    output["Phone 1"] = df[phone_cols[0]].apply(format_phone) if len(phone_cols) > 0 else ""
+    output["Phone 2"] = df[phone_cols[1]].apply(format_phone) if len(phone_cols) > 1 else ""
+    output["Phone 3"] = df[phone_cols[2]].apply(format_phone) if len(phone_cols) > 2 else ""
 
     email_cols = guess_by_contains(df, "@")[:2]
     output["Email 1"] = df[email_cols[0]] if len(email_cols) > 0 else ""
