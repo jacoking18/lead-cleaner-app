@@ -10,7 +10,8 @@ st.markdown("**Creator: Jaco Simkin – Director of Data Analysis**")
 
 FINAL_COLUMNS = [
     "Lead Date", "Business Name", "Full Name", "SSN", "DOB", "Industry", "EIN",
-    "Business Start Date", "Phone 1", "Phone 2", "Email 1", "Email 2", "Business Address"
+    "Business Start Date", "Phone 1", "Phone 2", "Phone 3", "Email 1", "Email 2",
+    "Business Address", "Home Address", "Monthly Revenue"
 ]
 
 def normalize_headers(columns):
@@ -27,21 +28,21 @@ def guess_by_regex(df, regex):
     return None
 
 def guess_by_contains(df, keyword):
-    return [col for col in df.columns if df[col].astype(str).str.contains(keyword).sum() > 2]
+    return [col for col in df.columns if df[col].astype(str).str.contains(keyword, na=False).sum() > 2]
 
 def build_full_name(df):
     if 'firstname' in df.columns and 'lastname' in df.columns:
         return df['firstname'].astype(str).str.strip() + ' ' + df['lastname'].astype(str).str.strip()
-    name_col = next((c for c in df.columns if 'name' in c), None)
+    name_col = next((c for c in df.columns if 'fullname' in c or 'contactname' in c or 'name' in c), None)
     return df[name_col] if name_col else pd.Series(["" for _ in range(len(df))])
 
 def extract_business_name(df):
     for col in df.columns:
         if df[col].astype(str).str.contains(r'\b(llc|inc|co|corp|ltd)\b', flags=re.IGNORECASE).sum() > 2:
-            date_matches = df[col].astype(str).str.contains(r'\d{1,2}[/-]\d{1,2}[/-]\d{2,4}')
+            date_matches = df[col].astype(str).str.contains(r'\d{1,2}[-/]\d{1,2}[-/]\d{2,4}')
             if date_matches.sum() < len(df) * 0.3:
                 return df[col]
-    name = next((col for col in df.columns if any(k in col for k in ['business', 'company', 'dba'])), None)
+    name = next((col for col in df.columns if any(k in col for k in ['business', 'company', 'dba', 'bizname'])), None)
     return df[name] if name else ""
 
 def classify_date_columns(df):
@@ -94,23 +95,39 @@ def clean_dataframe(df):
 
     output["Business Name"] = extract_business_name(df)
     output["Full Name"] = build_full_name(df)
-    output["SSN"] = df.get(guess_by_regex(df, r"^\d{3}-\d{2}-\d{4}$"), "")
-    output["EIN"] = df.get(guess_by_regex(df, r"^\d{2}-\d{7}$"), "")
+
+    ssn_col = next((c for c in df.columns if any(k in c for k in ['ssn', 'social'])), None)
+    output["SSN"] = df.get(ssn_col, df.get(guess_by_regex(df, r"^\d{3}-\d{2}-\d{4}$"), ""))
+
+    ein_col = next((c for c in df.columns if any(k in c for k in ['ein', 'tax'])), None)
+    output["EIN"] = df.get(ein_col, df.get(guess_by_regex(df, r"^\d{2}-\d{7}$"), ""))
+
     bsd_col, dob_col = classify_date_columns(df)
     output["Business Start Date"] = df[bsd_col] if bsd_col else ""
     if dob_col:
         parsed_dob = pd.to_datetime(df[dob_col], errors='coerce')
         output["DOB"] = parsed_dob.dt.strftime("%m/%d/%Y")
     else:
-        output["DOB"] = ""
+        dob_hint = next((c for c in df.columns if any(k in c for k in ['dob', 'birth'])), None)
+        parsed_dob = pd.to_datetime(df[dob_hint], errors='coerce') if dob_hint else None
+        output["DOB"] = parsed_dob.dt.strftime("%m/%d/%Y") if parsed_dob is not None else ""
+
     output["Industry"] = df.get(next((c for c in df.columns if 'industry' in c or 'sector' in c), ''), '')
-    phone_cols = guess_by_contains(df, r'\d{3}.*\d{4}')[:2]
+
+    phone_cols = guess_by_contains(df, r'\d{3}.*\d{4}')[:3]
     output["Phone 1"] = df[phone_cols[0]].apply(format_phone) if len(phone_cols) > 0 else ""
     output["Phone 2"] = df[phone_cols[1]].apply(format_phone) if len(phone_cols) > 1 else ""
+    output["Phone 3"] = df[phone_cols[2]].apply(format_phone) if len(phone_cols) > 2 else ""
+
     email_cols = guess_by_contains(df, "@")[:2]
     output["Email 1"] = df[email_cols[0]] if len(email_cols) > 0 else ""
     output["Email 2"] = df[email_cols[1]] if len(email_cols) > 1 else ""
+
     output["Business Address"] = combine_address(df)
+    output["Home Address"] = ""
+    rev_col = next((c for c in df.columns if 'revenue' in c or 'monthly' in c), None)
+    output["Monthly Revenue"] = df.get(rev_col, "")
+
     output = output[FINAL_COLUMNS].applymap(clean_text)
     return output
 
