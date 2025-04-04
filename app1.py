@@ -4,6 +4,44 @@ import re
 import os
 from datetime import datetime
 
+# -------------------- PASSWORD PROTECTION --------------------
+def check_password():
+    def password_entered():
+        if st.session_state["password"] == "capnow$":
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        st.text_input("Enter password:", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        st.text_input("Enter password:", type="password", on_change=password_entered, key="password")
+        st.error("Incorrect password.")
+        return False
+    else:
+        return True
+
+if not check_password():
+    st.stop()
+# -------------------------------------------------------------
+
+st.set_page_config(page_title="CAPNOW DATA CLEANER APP")
+st.title("CAPNOW DATA CLEANER APP")
+st.markdown("**Creator: Jaco Simkin – Director of Data Analysis**")
+
+st.markdown("""
+This app cleans raw CSV or Excel files received from lead providers and outputs a standardized file ready for the CAPNOW HUB.
+
+It smartly detects and matches fields like Full Name, SSN, Phone, Revenue, and more, even if the original column names or formats vary.
+
+- It always keeps all expected HUB columns, even if they’re empty.
+- It uses smart logic to detect DOB (old dates), BSD (recent dates), Business Names (LLC/INC/etc), and more.
+- It shows the original file for comparison so you can see what was cleaned.
+- The final result is downloadable as: `originalfilename_cleaned.csv`.
+""")
+
 st.set_page_config(page_title="CAPNOW DATA CLEANER APP")
 st.title("CAPNOW DATA CLEANER APP")
 st.markdown("**Creator: Jaco Simkin – Director of Data Analysis**")
