@@ -97,23 +97,20 @@ def clean_dataframe(df):
     output["Email 2"] = df[email_cols[1]] if len(email_cols) > 1 else ""
     output["Business Address"] = combine_address(df)
     output = output[FINAL_COLUMNS].applymap(clean_text)
-    leftovers = [c for c in df.columns if c not in normalize_headers(FINAL_COLUMNS)]
-    unrecognized = df[leftovers] if leftovers else pd.DataFrame()
-    return output, unrecognized
+    return output
 
 uploaded_file = st.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx"])
 if uploaded_file:
     try:
         ext = os.path.splitext(uploaded_file.name)[1].lower()
         df = pd.read_csv(uploaded_file) if ext == ".csv" else pd.read_excel(uploaded_file)
-        cleaned_df, untouched_df = clean_dataframe(df)
+        cleaned_df = clean_dataframe(df)
         st.success("Data cleaned successfully.")
         st.markdown("### Cleaned CSV (Full Preview)")
         st.dataframe(cleaned_df, use_container_width=True)
 
-        if not untouched_df.empty:
-            st.markdown("### Unrecognized Columns (shown in red)")
-            st.dataframe(untouched_df.style.set_properties(**{'background-color': 'salmon'}), use_container_width=True)
+        st.markdown("### Original Uploaded CSV")
+        st.dataframe(df, use_container_width=True)
 
         filename = os.path.splitext(uploaded_file.name)[0] + "_cleaned.csv"
         st.download_button(
