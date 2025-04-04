@@ -72,8 +72,12 @@ def combine_address(df):
 
 def extract_phones_rowwise(df):
     phone_pattern = re.compile(r"\(?\d{3}[\)\s.-]?\d{3}[\s.-]?\d{4}")
-    phones = df.astype(str).apply(lambda row: phone_pattern.findall(" ".join(row.values)), axis=1)
-    return pd.DataFrame(phones.tolist(), columns=["Phone 1", "Phone 2", "Phone 3"]).fillna("")
+    def get_phones(row):
+        matches = phone_pattern.findall(" ".join(row.values.astype(str)))
+        return (matches + ["", "", ""])[:3]  # Always return 3 values
+    phone_data = df.apply(get_phones, axis=1, result_type="expand")
+    phone_data.columns = ["Phone 1", "Phone 2", "Phone 3"]
+    return phone_data
 
 def format_phone(phone):
     digits = re.sub(r"\D", "", str(phone))
@@ -112,7 +116,6 @@ def clean_dataframe(df):
 
     output["Industry"] = df.get(next((c for c in df.columns if 'industry' in c or 'sector' in c), ''), '')
 
-    # Extract phones from any column row-by-row
     phones_df = extract_phones_rowwise(df).applymap(format_phone)
     output["Phone 1"] = phones_df.get("Phone 1", "")
     output["Phone 2"] = phones_df.get("Phone 2", "")
