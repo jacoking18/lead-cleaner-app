@@ -114,10 +114,13 @@ def clean_dataframe(df):
 
     output["Industry"] = df.get(next((c for c in df.columns if 'industry' in c or 'sector' in c), ''), '')
 
-    phone_cols = guess_by_contains(df, r'\d{3}.*\d{4}')[:3]
-    output["Phone 1"] = df[phone_cols[0]].apply(format_phone) if len(phone_cols) > 0 else ""
-    output["Phone 2"] = df[phone_cols[1]].apply(format_phone) if len(phone_cols) > 1 else ""
-    output["Phone 3"] = df[phone_cols[2]].apply(format_phone) if len(phone_cols) > 2 else ""
+    possible_phone_cols = [col for col in df.columns if any(p in col for p in ['phone', 'cell', 'mobile', 'phonenumber', 'number'])]
+    pattern_matches = guess_by_contains(df, r'\(?\d{3}[\)\s.-]?\d{3}[\s.-]?\d{4}')
+    all_phone_cols = list(dict.fromkeys(possible_phone_cols + pattern_matches))[:3]
+
+    output["Phone 1"] = df[all_phone_cols[0]].apply(format_phone) if len(all_phone_cols) > 0 else ""
+    output["Phone 2"] = df[all_phone_cols[1]].apply(format_phone) if len(all_phone_cols) > 1 else ""
+    output["Phone 3"] = df[all_phone_cols[2]].apply(format_phone) if len(all_phone_cols) > 2 else ""
 
     email_cols = guess_by_contains(df, "@")[:2]
     output["Email 1"] = df[email_cols[0]] if len(email_cols) > 0 else ""
@@ -125,7 +128,8 @@ def clean_dataframe(df):
 
     output["Business Address"] = combine_address(df)
     output["Home Address"] = ""
-    rev_col = next((c for c in df.columns if 'revenue' in c or 'monthly' in c), None)
+
+    rev_col = next((c for c in df.columns if 'revenue' in c or 'monthly' in c or 'turnover' in c), None)
     output["Monthly Revenue"] = df.get(rev_col, "")
 
     output = output[FINAL_COLUMNS].applymap(clean_text)
