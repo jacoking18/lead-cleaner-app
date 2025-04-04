@@ -48,27 +48,20 @@ def extract_business_name(df):
 def classify_date_columns(df):
     bsd_col, dob_col = None, None
     max_old_ratio = 0
-
     for col in df.columns:
         try:
             series = pd.to_datetime(df[col].astype(str), errors='coerce')
             valid_dates = series.dropna()
-
             if valid_dates.shape[0] < 3:
                 continue
-
             old_dates_ratio = (valid_dates.dt.year < 2000).sum() / len(valid_dates)
-
             if old_dates_ratio > 0.6 and old_dates_ratio > max_old_ratio:
                 dob_col = col
                 max_old_ratio = old_dates_ratio
-
             elif valid_dates.dt.year.between(2005, datetime.now().year).sum() > len(valid_dates) * 0.6 and col != df.columns[0]:
                 bsd_col = col
-
         except Exception as e:
             continue
-
     return bsd_col, dob_col
 
 def combine_address(df):
@@ -77,20 +70,14 @@ def combine_address(df):
         return df[address_cols].astype(str).agg(" ".join, axis=1)
     return ""
 
+def extract_phones_rowwise(df):
+    phone_pattern = re.compile(r"\(?\d{3}[\)\s.-]?\d{3}[\s.-]?\d{4}")
+    phones = df.astype(str).apply(lambda row: phone_pattern.findall(" ".join(row.values)), axis=1)
+    return pd.DataFrame(phones.tolist(), columns=["Phone 1", "Phone 2", "Phone 3"]).fillna("")
+
 def format_phone(phone):
     digits = re.sub(r"\D", "", str(phone))
     return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}" if len(digits) == 10 else ""
-
-def detect_phone_columns(df):
-    phone_candidates = []
-    for col in df.columns:
-        values = df[col].astype(str)
-        match_count = values.str.contains(r'\(?\d{3}[\)\s.-]?\d{3}[\s.-]?\d{4}', regex=True).sum()
-        if match_count >= 3:
-            phone_candidates.append(col)
-        if len(phone_candidates) >= 3:
-            break
-    return phone_candidates
 
 def clean_dataframe(df):
     df.columns = normalize_headers(df.columns)
@@ -125,10 +112,11 @@ def clean_dataframe(df):
 
     output["Industry"] = df.get(next((c for c in df.columns if 'industry' in c or 'sector' in c), ''), '')
 
-    phone_cols = detect_phone_columns(df)
-    output["Phone 1"] = df[phone_cols[0]].apply(format_phone) if len(phone_cols) > 0 else ""
-    output["Phone 2"] = df[phone_cols[1]].apply(format_phone) if len(phone_cols) > 1 else ""
-    output["Phone 3"] = df[phone_cols[2]].apply(format_phone) if len(phone_cols) > 2 else ""
+    # Extract phones from any column row-by-row
+    phones_df = extract_phones_rowwise(df).applymap(format_phone)
+    output["Phone 1"] = phones_df.get("Phone 1", "")
+    output["Phone 2"] = phones_df.get("Phone 2", "")
+    output["Phone 3"] = phones_df.get("Phone 3", "")
 
     email_cols = guess_by_contains(df, "@")[:2]
     output["Email 1"] = df[email_cols[0]] if len(email_cols) > 0 else ""
