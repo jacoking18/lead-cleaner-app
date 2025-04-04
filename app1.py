@@ -89,6 +89,11 @@ def format_phone(phone):
 def clean_dataframe(df):
     original_cols = df.columns.tolist()
     df.columns = normalize_headers(df.columns)
+
+    # Filter out irrelevant columns like folder/file references
+    ignore_keywords = ['folder', 'file location', 'pdf', 'storage']
+    df = df[[col for col in df.columns if not any(key in col.lower() for key in ignore_keywords)]]
+
     output = pd.DataFrame()
 
     # Lead Date
