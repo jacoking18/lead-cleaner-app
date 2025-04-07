@@ -39,7 +39,7 @@ It lets you visually assign uploaded columns into HUB fields — and allows comb
 - Assign multiple source columns to each HUB field to merge them (e.g. address parts).
 - Keeps all HUB columns even if left unmapped.
 - Logs mappings to improve smart predictions in the future.
-- Suggests column mappings based on historical user behavior.
+- Suggests column mappings based on historical user behavior with confidence visualization.
 - Download the cleaned result once mapping is done.
 """)
 
@@ -61,15 +61,15 @@ def log_user_mapping(filename, field, selected_cols):
         for col in selected_cols:
             log.write(f"{filename},{col},\"{sample_values}\",{field}\n")
 
-# 🧠 Suggest mappings from past logs
-def get_suggested_columns(field):
+# 🧠 Suggest mappings from past logs with confidence scores
+def get_suggested_columns_with_scores(field):
     if not os.path.exists("mappings_log.csv"):
         return []
     try:
         log_df = pd.read_csv("mappings_log.csv", names=["filename", "column", "sample", "hub_field"])
         matches = log_df[log_df["hub_field"] == field]["column"]
-        suggestions = matches.value_counts().index.tolist()
-        return suggestions
+        counts = matches.value_counts().to_dict()
+        return sorted(counts.items(), key=lambda x: -x[1])
     except:
         return []
 
@@ -111,11 +111,15 @@ if uploaded_file is not None:
         col = cols_left if i % 2 == 0 else cols_right
         with col:
             st.markdown(f"<div style='font-weight:bold; font-size:16px; margin-bottom:4px'>{field}</div>", unsafe_allow_html=True)
-            suggested = get_suggested_columns(field)
+            suggested_pairs = get_suggested_columns_with_scores(field)
+            suggested = [s[0] for s in suggested_pairs if s[0] in all_headers][:2]
+            confidence_text = ", ".join([f"{s[0]} ({s[1]})" for s in suggested_pairs if s[0] in all_headers])
+            if confidence_text:
+                st.caption(f"Suggestions by past use: {confidence_text}")
             st.session_state.mappings[field] = st.multiselect(
                 label="",
                 options=all_headers,
-                default=[s for s in suggested if s in all_headers][:2],
+                default=suggested,
                 key=field
             )
 
