@@ -96,7 +96,6 @@ if uploaded_file is not None:
     st.success("File uploaded successfully!")
     st.dataframe(df)
 
-    # BEGIN CLEANING LOGIC
     df.columns = [col.strip().lower().replace(" ", "").replace("-", "") for col in df.columns]
     cleaned_df = pd.DataFrame(columns=FINAL_COLUMNS)
 
@@ -104,15 +103,15 @@ if uploaded_file is not None:
         for key, aliases in FIELD_ALIASES.items():
             if col in aliases:
                 if key == "first_name":
-                    cleaned_df["Full Name"] = df[col] if "Full Name" not in cleaned_df else cleaned_df["Full Name"]
+                    cleaned_df["Full Name"] = df[col].astype(str).str.title() if "Full Name" not in cleaned_df else cleaned_df["Full Name"]
                 elif key == "last_name":
                     if "Full Name" in cleaned_df:
-                        cleaned_df["Full Name"] = cleaned_df["Full Name"] + " " + df[col].astype(str)
+                        cleaned_df["Full Name"] = (cleaned_df["Full Name"] + " " + df[col].astype(str).str.title()).str.strip()
                 elif key == "dob":
                     dob_series = pd.to_datetime(df[col], errors='coerce')
                     old_dates = dob_series[dob_series.dt.year < datetime.now().year - 18]
                     if len(old_dates) > 0:
-                        cleaned_df["DOB"] = df[col]
+                        cleaned_df["DOB"] = dob_series.dt.strftime('%Y-%m-%d')
                 elif key == "revenue":
                     cleaned_df["Monthly Revenue"] = df[col]
                 elif key == "ein":
@@ -122,8 +121,9 @@ if uploaded_file is not None:
                 elif key == "industry":
                     cleaned_df["Industry"] = df[col]
                 elif key == "business_name":
-                    if df[col].astype(str).str.contains(r"LLC|INC|CORP|LTD|CO", case=False, na=False).sum() > 0:
-                        cleaned_df["Business Name"] = df[col]
+                    biz_col = df[col].astype(str)
+                    if biz_col.str.contains(r"LLC|INC|CORP|LTD|CO", case=False, na=False).sum() > 0:
+                        cleaned_df["Business Name"] = biz_col
                 elif key.startswith("phone"):
                     phone_slot = f"Phone {key[-1]}"
                     if phone_slot in FINAL_COLUMNS:
@@ -137,6 +137,11 @@ if uploaded_file is not None:
                         cleaned_df["Business Address"] = df[col]
                     else:
                         cleaned_df["Home Address"] = df[col]
+
+    # Format Dates (Lead Date, DOB, Business Start Date)
+    for date_col in ["Lead Date", "DOB", "Business Start Date"]:
+        if date_col in cleaned_df.columns:
+            cleaned_df[date_col] = pd.to_datetime(cleaned_df[date_col], errors='coerce').dt.strftime('%Y-%m-%d')
 
     st.subheader("Cleaned CSV (Full Preview)")
     st.dataframe(cleaned_df)
