@@ -61,14 +61,17 @@ def log_user_mapping(filename, field, selected_cols):
         for col in selected_cols:
             log.write(f"{filename},{col},\"{sample_values}\",{field}\n")
 
-# 🧠 Suggest mappings from past logs
-def get_suggested_columns(field):
+# 🧠 Suggest mappings from past logs with confidence
+
+def get_suggested_columns_with_confidence(field):
     if not os.path.exists("mappings_log.csv"):
         return []
     try:
         log_df = pd.read_csv("mappings_log.csv", names=["filename", "column", "sample", "hub_field"])
-        matches = log_df[log_df["hub_field"] == field]["column"]
-        suggestions = matches.value_counts().index.tolist()
+        field_logs = log_df[log_df["hub_field"] == field]
+        total = len(field_logs)
+        counts = field_logs["column"].value_counts()
+        suggestions = [(col, int((count / total) * 100)) for col, count in counts.items()]
         return suggestions
     except:
         return []
@@ -128,11 +131,18 @@ if uploaded_file is not None:
         col = cols_left if i % 2 == 0 else cols_right
         with col:
             st.markdown(f"<div style='font-weight:bold; font-size:16px; margin-bottom:4px'>{field}</div>", unsafe_allow_html=True)
-            suggested = get_suggested_columns(field)
+            suggestions = get_suggested_columns_with_confidence(field)
+            default_vals = [col for col, conf in suggestions if col in all_headers][:2]
+
+            if suggestions:
+                for col_s, conf in suggestions:
+                    if col_s in all_headers:
+                        st.markdown(f"<div style='font-size:12px; color:gray'>{col_s} <progress value='{conf}' max='100'></progress> {conf}%</div>", unsafe_allow_html=True)
+
             st.session_state.mappings[field] = st.multiselect(
                 label="",
                 options=all_headers,
-                default=[s for s in suggested if s in all_headers][:2],
+                default=default_vals,
                 key=field
             )
 
