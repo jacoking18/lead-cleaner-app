@@ -87,9 +87,10 @@ if uploaded_file is not None:
     for i, field in enumerate(FINAL_COLUMNS):
         col = cols_left if i % 2 == 0 else cols_right
         with col:
+            st.markdown(f"<div style='font-weight:bold; font-size:16px; margin-bottom:4px'>{field}</div>", unsafe_allow_html=True)
             st.session_state.mappings[field] = st.multiselect(
-                f"Select columns to combine for: {field}",
-                all_headers,
+                label="",
+                options=all_headers,
                 key=field
             )
 
