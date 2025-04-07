@@ -38,6 +38,8 @@ It lets you visually assign uploaded columns into HUB fields — and allows comb
 
 - Assign multiple source columns to each HUB field to merge them (e.g. address parts).
 - Keeps all HUB columns even if left unmapped.
+- Logs mappings to improve smart predictions in the future.
+- Suggests column mappings based on historical user behavior.
 - Download the cleaned result once mapping is done.
 """)
 
@@ -49,6 +51,27 @@ FINAL_COLUMNS = [
 
 if 'mappings' not in st.session_state:
     st.session_state.mappings = {}
+
+# 📦 Store training log
+def log_user_mapping(filename, field, selected_cols):
+    if not selected_cols:
+        return
+    sample_values = df[selected_cols].astype(str).head(5).values.tolist()
+    with open("mappings_log.csv", "a") as log:
+        for col in selected_cols:
+            log.write(f"{filename},{col},\"{sample_values}\",{field}\n")
+
+# 🧠 Suggest mappings from past logs
+def get_suggested_columns(field):
+    if not os.path.exists("mappings_log.csv"):
+        return []
+    try:
+        log_df = pd.read_csv("mappings_log.csv", names=["filename", "column", "sample", "hub_field"])
+        matches = log_df[log_df["hub_field"] == field]["column"]
+        suggestions = matches.value_counts().index.tolist()
+        return suggestions
+    except:
+        return []
 
 uploaded_file = st.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx"], on_change=lambda: st.session_state.update({'mappings': {}}))
 
@@ -88,9 +111,11 @@ if uploaded_file is not None:
         col = cols_left if i % 2 == 0 else cols_right
         with col:
             st.markdown(f"<div style='font-weight:bold; font-size:16px; margin-bottom:4px'>{field}</div>", unsafe_allow_html=True)
+            suggested = get_suggested_columns(field)
             st.session_state.mappings[field] = st.multiselect(
                 label="",
                 options=all_headers,
+                default=[s for s in suggested if s in all_headers][:2],
                 key=field
             )
 
@@ -103,6 +128,7 @@ if uploaded_file is not None:
             if selected_cols:
                 combined = df[selected_cols].astype(str).apply(lambda row: ' '.join(row.dropna().astype(str)).strip(), axis=1)
                 cleaned_df[hub_col] = combined.replace("nan", "", regex=False).replace("None", "", regex=False)
+                log_user_mapping(uploaded_file.name, hub_col, selected_cols)
             else:
                 cleaned_df[hub_col] = ""
 
