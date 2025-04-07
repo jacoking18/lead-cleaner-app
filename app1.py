@@ -95,5 +95,8 @@ if uploaded_file is not None:
 
     st.success("File uploaded successfully!")
     st.dataframe(df)
+
+    # ➕ PLACEHOLDER: this is where the full cleaning logic must continue
+    st.info("✅ Now add the cleaning logic to generate HUB-formatted data.")
 else:
     st.info("Awaiting file upload...")
