@@ -79,19 +79,19 @@ df = None
 if uploaded_file is not None:
     try:
         if uploaded_file.name.endswith('.csv'):
-            for sep in [',', ';', '\t', '|']:
-                try:
-                    df = pd.read_csv(uploaded_file, sep=sep, engine='python')
-                    if len(df.columns) > 1:
-                        break
-                except:
-                    continue
-            # Manual parse fallback for one-column issue
-            if df is not None and len(df.columns) == 1:
-                content = uploaded_file.read().decode(errors='ignore')
-                lines = content.strip().split('\n')
-                split_lines = [line.split(',') for line in lines]
-                df = pd.DataFrame(split_lines[1:], columns=split_lines[0])
+            content = uploaded_file.read().decode(errors='ignore')
+            lines = content.strip().split('\n')
+
+            header_candidates = [line.split(',') for line in lines[:5] if len(line.split(',')) > 3]
+            header_row_index = 0
+
+            for i, row in enumerate(header_candidates):
+                if any(cell.strip().lower() in ['phone1', 'firstname', 'lastname', 'email'] for cell in row):
+                    header_row_index = i
+                    break
+
+            from io import StringIO
+            df = pd.read_csv(StringIO(content), skiprows=header_row_index)
 
         elif uploaded_file.name.endswith('.xlsx'):
             try:
@@ -99,7 +99,11 @@ if uploaded_file is not None:
             except ImportError:
                 st.error("Missing dependency 'openpyxl'. Please install it via pip: pip install openpyxl")
                 st.stop()
-            df = pd.read_excel(uploaded_file, engine="openpyxl")
+            xl = pd.ExcelFile(uploaded_file)
+            first_sheet = xl.sheet_names[0]
+            df = xl.parse(first_sheet)
+            if 'Unnamed' in str(df.columns[0]):
+                df = xl.parse(first_sheet, skiprows=1)
         else:
             st.error("Unsupported file format.")
             st.stop()
