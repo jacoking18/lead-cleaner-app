@@ -80,6 +80,11 @@ if uploaded_file is not None:
                 except UnicodeDecodeError:
                     df = pd.read_csv(uploaded_file, encoding='cp1252')
         elif uploaded_file.name.endswith('.xlsx'):
+            try:
+                import openpyxl
+            except ImportError:
+                st.error("Missing dependency 'openpyxl'. Please install it via pip: pip install openpyxl")
+                st.stop()
             df = pd.read_excel(uploaded_file, engine="openpyxl")
         else:
             st.error("Unsupported file format.")
