@@ -34,12 +34,11 @@ st.markdown("**Creator: Jaco Simkin – Director of Data Analysis**")
 st.markdown("""
 This app cleans raw CSV or Excel files received from lead providers and outputs a standardized file ready for the CAPNOW HUB.
 
-It smartly detects and matches fields like Full Name, SSN, Phone, Revenue, and more, even if the original column names or formats vary.
+It lets you visually drag-and-drop column headers into HUB column targets so you always control what gets mapped where.
 
-- It always keeps all expected HUB columns, even if they’re empty.
-- It uses smart logic to detect DOB (old dates), BSD (recent dates), Business Names (LLC/INC/etc), and more.
-- It shows the original file for comparison so you can see what was cleaned.
-- The final result is downloadable as: `originalfilename_cleaned.csv`.
+- Drag uploaded column headers into the matching HUB fields.
+- Keeps all HUB columns even if left unmapped.
+- Download the cleaned result once mapping is done.
 """)
 
 FINAL_COLUMNS = [
@@ -48,25 +47,6 @@ FINAL_COLUMNS = [
     "Business Address", "Home Address", "Monthly Revenue"
 ]
 
-FIELD_ALIASES = {
-    "first_name": ["firstname", "first name", "fname", "applicantfirstname", "givenname"],
-    "last_name": ["lastname", "last name", "lname", "applicantlastname", "surname"],
-    "full_name": ["fullname", "contactname", "applicantname", "name", "borrowername", "clientname", "ownername"],
-    "ssn": ["ssn", "social", "socialsecurity", "socialsecuritynumber", "social sec"],
-    "ein": ["ein", "taxid", "tax id", "fein", "federalid", "business taxid", "employer id"],
-    "dob": ["dob", "birthdate", "dateofbirth", "birth", "d.o.b", "applicantdob"],
-    "business_name": ["businessname", "company", "companyname", "organization", "bizname", "dba", "employer", "legal business name"],
-    "industry": ["industry", "sector", "business type", "business category", "natureofbusiness"],
-    "phone": ["phone", "cell", "mobile", "contact", "primary phone", "contact number", "number", "telephone"],
-    "phone2": ["phone2", "cell2", "mobile2", "secondary phone", "alt phone"],
-    "phone3": ["phone3", "cell3", "mobile3", "extra phone"],
-    "email": ["email", "email1", "gmail", "contact email", "googleemail", "applicantemail", "e-mail"],
-    "email2": ["email2", "backupemail", "secondaryemail", "alt email"],
-    "revenue": ["monthly revenue", "revenue", "income", "turnover", "monthlyincome", "monthly gross", "gross revenue", "grossmonthlyincome"],
-    "address": ["address", "street", "city", "state", "zip", "zipcode", "mailing address", "business address", "home address", "location", "residential address"]
-}
-
-# -------------------- FILE UPLOAD --------------------
 uploaded_file = st.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx"])
 
 if uploaded_file is not None:
@@ -94,64 +74,38 @@ if uploaded_file is not None:
         st.stop()
 
     st.success("File uploaded successfully!")
-    st.dataframe(df)
-
-    df.columns = [col.strip().lower().replace(" ", "").replace("-", "") for col in df.columns]
-    cleaned_df = pd.DataFrame(columns=FINAL_COLUMNS)
-
-    for col in df.columns:
-        for key, aliases in FIELD_ALIASES.items():
-            if col in aliases:
-                if key == "first_name":
-                    cleaned_df["Full Name"] = df[col].astype(str).str.title() if "Full Name" not in cleaned_df else cleaned_df["Full Name"]
-                elif key == "last_name":
-                    if "Full Name" in cleaned_df:
-                        cleaned_df["Full Name"] = (cleaned_df["Full Name"] + " " + df[col].astype(str).str.title()).str.strip()
-                elif key == "dob":
-                    dob_series = pd.to_datetime(df[col], errors='coerce')
-                    old_dates = dob_series[dob_series.dt.year < datetime.now().year - 18]
-                    if len(old_dates) > 0:
-                        cleaned_df["DOB"] = dob_series.dt.strftime('%Y-%m-%d')
-                elif key == "revenue":
-                    cleaned_df["Monthly Revenue"] = df[col]
-                elif key == "ein":
-                    cleaned_df["EIN"] = df[col]
-                elif key == "ssn":
-                    cleaned_df["SSN"] = df[col]
-                elif key == "industry":
-                    cleaned_df["Industry"] = df[col]
-                elif key == "business_name":
-                    biz_col = df[col].astype(str)
-                    if biz_col.str.contains(r"LLC|INC|CORP|LTD|CO", case=False, na=False).sum() > 0:
-                        cleaned_df["Business Name"] = biz_col
-                elif key.startswith("phone"):
-                    phone_slot = f"Phone {key[-1]}"
-                    if phone_slot in FINAL_COLUMNS:
-                        cleaned_df[phone_slot] = df[col]
-                elif key.startswith("email"):
-                    email_slot = f"Email {key[-1]}"
-                    if email_slot in FINAL_COLUMNS:
-                        cleaned_df[email_slot] = df[col]
-                elif key == "address":
-                    if "Business Address" not in cleaned_df or cleaned_df["Business Address"].isnull().all():
-                        cleaned_df["Business Address"] = df[col]
-                    else:
-                        cleaned_df["Home Address"] = df[col]
-
-    # Format Dates (Lead Date, DOB, Business Start Date)
-    for date_col in ["Lead Date", "DOB", "Business Start Date"]:
-        if date_col in cleaned_df.columns:
-            cleaned_df[date_col] = pd.to_datetime(cleaned_df[date_col], errors='coerce').dt.strftime('%Y-%m-%d')
-
-    st.subheader("Cleaned CSV (Full Preview)")
-    st.dataframe(cleaned_df)
-
     st.subheader("Original Uploaded CSV")
     st.dataframe(df)
 
-    cleaned_filename = uploaded_file.name.rsplit('.', 1)[0] + '_cleaned.csv'
-    cleaned_df.to_csv(cleaned_filename, index=False)
-    with open(cleaned_filename, 'rb') as f:
-        st.download_button("Download Cleaned CSV", f, file_name=cleaned_filename)
+    st.markdown("### 👉 Map Your Columns to HUB Fields")
+    mappings = {}
+    all_headers = list(df.columns)
+
+    for field in FINAL_COLUMNS:
+        mappings[field] = st.selectbox(f"Select column for: {field}", ["None"] + all_headers, key=field)
+
+    st.markdown("---")
+
+    if st.button("Generate Cleaned CSV"):
+        cleaned_df = pd.DataFrame()
+        for hub_col in FINAL_COLUMNS:
+            selected_col = mappings.get(hub_col)
+            if selected_col and selected_col != "None" and selected_col in df.columns:
+                cleaned_df[hub_col] = df[selected_col]
+            else:
+                cleaned_df[hub_col] = None
+
+        # Try to format date columns properly
+        for date_col in ["Lead Date", "DOB", "Business Start Date"]:
+            if date_col in cleaned_df.columns:
+                cleaned_df[date_col] = pd.to_datetime(cleaned_df[date_col], errors='coerce').dt.strftime('%Y-%m-%d')
+
+        st.subheader("Cleaned CSV (Full Preview)")
+        st.dataframe(cleaned_df)
+
+        cleaned_filename = uploaded_file.name.rsplit('.', 1)[0] + '_cleaned.csv'
+        cleaned_df.to_csv(cleaned_filename, index=False)
+        with open(cleaned_filename, 'rb') as f:
+            st.download_button("Download Cleaned CSV", f, file_name=cleaned_filename)
 else:
     st.info("Awaiting file upload...")
