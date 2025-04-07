@@ -83,12 +83,15 @@ if uploaded_file is not None:
     st.markdown("### 👉 Map Your Columns to HUB Fields")
     all_headers = list(df.columns)
 
-    for field in FINAL_COLUMNS:
-        st.session_state.mappings[field] = st.multiselect(
-            f"Select columns to combine for: {field}",
-            all_headers,
-            key=field
-        )
+    cols_left, cols_right = st.columns(2)
+    for i, field in enumerate(FINAL_COLUMNS):
+        col = cols_left if i % 2 == 0 else cols_right
+        with col:
+            st.session_state.mappings[field] = st.multiselect(
+                f"Select columns to combine for: {field}",
+                all_headers,
+                key=field
+            )
 
     st.markdown("---")
 
