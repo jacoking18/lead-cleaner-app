@@ -52,6 +52,11 @@ FINAL_COLUMNS = [
 if 'mappings' not in st.session_state:
     st.session_state.mappings = {}
 
+# Refresh button
+if st.button("🔄 Clear Mappings"):
+    st.session_state.mappings = {}
+    st.rerun()
+
 # 📦 Store training log
 def log_user_mapping(filename, field, selected_cols):
     if not selected_cols:
@@ -137,7 +142,7 @@ if uploaded_file is not None:
             if suggestions:
                 for col_s, conf in suggestions:
                     if col_s in all_headers:
-                        st.markdown(f"<div style='font-size:12px; color:gray'>{col_s} <progress value='{conf}' max='100'></progress> {conf}%</div>", unsafe_allow_html=True)
+                        st.progress(conf / 100, text=f"{col_s} ({conf}%)")
 
             st.session_state.mappings[field] = st.multiselect(
                 label="",
