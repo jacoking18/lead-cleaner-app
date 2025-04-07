@@ -34,9 +34,9 @@ st.markdown("**Creator: Jaco Simkin – Director of Data Analysis**")
 st.markdown("""
 This app cleans raw CSV or Excel files received from lead providers and outputs a standardized file ready for the CAPNOW HUB.
 
-It lets you visually drag-and-drop column headers into HUB column targets so you always control what gets mapped where.
+It lets you visually assign uploaded columns into HUB fields — and allows combining multiple source columns per HUB column.
 
-- Drag uploaded column headers into the matching HUB fields.
+- Assign multiple source columns to each HUB field to merge them (e.g. address parts).
 - Keeps all HUB columns even if left unmapped.
 - Download the cleaned result once mapping is done.
 """)
@@ -82,20 +82,20 @@ if uploaded_file is not None:
     all_headers = list(df.columns)
 
     for field in FINAL_COLUMNS:
-        mappings[field] = st.selectbox(f"Select column for: {field}", ["None"] + all_headers, key=field)
+        mappings[field] = st.multiselect(f"Select columns to combine for: {field}", all_headers, key=field)
 
     st.markdown("---")
 
     if st.button("Generate Cleaned CSV"):
         cleaned_df = pd.DataFrame()
         for hub_col in FINAL_COLUMNS:
-            selected_col = mappings.get(hub_col)
-            if selected_col and selected_col != "None" and selected_col in df.columns:
-                cleaned_df[hub_col] = df[selected_col]
+            selected_cols = mappings.get(hub_col, [])
+            if selected_cols:
+                combined = df[selected_cols].astype(str).apply(lambda row: ' '.join(row.dropna().astype(str)).strip(), axis=1)
+                cleaned_df[hub_col] = combined.replace("nan", "", regex=False).replace("None", "", regex=False)
             else:
-                cleaned_df[hub_col] = None
+                cleaned_df[hub_col] = ""
 
-        # Try to format date columns properly
         for date_col in ["Lead Date", "DOB", "Business Start Date"]:
             if date_col in cleaned_df.columns:
                 cleaned_df[date_col] = pd.to_datetime(cleaned_df[date_col], errors='coerce').dt.strftime('%Y-%m-%d')
