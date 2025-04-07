@@ -61,30 +61,31 @@ def log_user_mapping(filename, field, selected_cols):
         for col in selected_cols:
             log.write(f"{filename},{col},\"{sample_values}\",{field}\n")
 
-# 🧠 Suggest mappings from past logs with confidence scores
-def get_suggested_columns_with_scores(field):
+# 🧠 Suggest mappings from past logs
+def get_suggested_columns(field):
     if not os.path.exists("mappings_log.csv"):
         return []
     try:
         log_df = pd.read_csv("mappings_log.csv", names=["filename", "column", "sample", "hub_field"])
         matches = log_df[log_df["hub_field"] == field]["column"]
-        counts = matches.value_counts().to_dict()
-        return sorted(counts.items(), key=lambda x: -x[1])
+        suggestions = matches.value_counts().index.tolist()
+        return suggestions
     except:
         return []
 
 uploaded_file = st.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx"], on_change=lambda: st.session_state.update({'mappings': {}}))
 
+df = None
 if uploaded_file is not None:
     try:
         if uploaded_file.name.endswith('.csv'):
-            try:
-                df = pd.read_csv(uploaded_file, encoding='utf-8')
-            except UnicodeDecodeError:
+            for sep in [',', ';', '\t', '|']:
                 try:
-                    df = pd.read_csv(uploaded_file, encoding='ISO-8859-1')
-                except UnicodeDecodeError:
-                    df = pd.read_csv(uploaded_file, encoding='cp1252')
+                    df = pd.read_csv(uploaded_file, sep=sep, engine='python')
+                    if len(df.columns) > 1:
+                        break
+                except:
+                    continue
         elif uploaded_file.name.endswith('.xlsx'):
             try:
                 import openpyxl
@@ -95,6 +96,11 @@ if uploaded_file is not None:
         else:
             st.error("Unsupported file format.")
             st.stop()
+
+        if df is None or df.empty or len(df.columns) <= 1:
+            st.error("The file appears to be empty or not properly formatted. Please make sure it has column headers and data rows.")
+            st.stop()
+
     except Exception as e:
         st.error(f"Error while reading the file: {e}")
         st.stop()
@@ -111,15 +117,11 @@ if uploaded_file is not None:
         col = cols_left if i % 2 == 0 else cols_right
         with col:
             st.markdown(f"<div style='font-weight:bold; font-size:16px; margin-bottom:4px'>{field}</div>", unsafe_allow_html=True)
-            suggested_pairs = get_suggested_columns_with_scores(field)
-            suggested = [s[0] for s in suggested_pairs if s[0] in all_headers][:2]
-            confidence_text = ", ".join([f"{s[0]} ({s[1]})" for s in suggested_pairs if s[0] in all_headers])
-            if confidence_text:
-                st.caption(f"Suggestions by past use: {confidence_text}")
+            suggested = get_suggested_columns(field)
             st.session_state.mappings[field] = st.multiselect(
                 label="",
                 options=all_headers,
-                default=suggested,
+                default=[s for s in suggested if s in all_headers][:2],
                 key=field
             )
 
