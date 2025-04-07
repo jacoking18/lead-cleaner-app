@@ -47,7 +47,10 @@ FINAL_COLUMNS = [
     "Business Address", "Home Address", "Monthly Revenue"
 ]
 
-uploaded_file = st.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx"])
+if 'mappings' not in st.session_state:
+    st.session_state.mappings = {}
+
+uploaded_file = st.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx"], on_change=lambda: st.session_state.update({'mappings': {}}))
 
 if uploaded_file is not None:
     try:
@@ -78,18 +81,21 @@ if uploaded_file is not None:
     st.dataframe(df)
 
     st.markdown("### 👉 Map Your Columns to HUB Fields")
-    mappings = {}
     all_headers = list(df.columns)
 
     for field in FINAL_COLUMNS:
-        mappings[field] = st.multiselect(f"Select columns to combine for: {field}", all_headers, key=field)
+        st.session_state.mappings[field] = st.multiselect(
+            f"Select columns to combine for: {field}",
+            all_headers,
+            key=field
+        )
 
     st.markdown("---")
 
     if st.button("Generate Cleaned CSV"):
         cleaned_df = pd.DataFrame()
         for hub_col in FINAL_COLUMNS:
-            selected_cols = mappings.get(hub_col, [])
+            selected_cols = st.session_state.mappings.get(hub_col, [])
             if selected_cols:
                 combined = df[selected_cols].astype(str).apply(lambda row: ' '.join(row.dropna().astype(str)).strip(), axis=1)
                 cleaned_df[hub_col] = combined.replace("nan", "", regex=False).replace("None", "", regex=False)
