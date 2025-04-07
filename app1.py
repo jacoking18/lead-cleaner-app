@@ -96,7 +96,57 @@ if uploaded_file is not None:
     st.success("File uploaded successfully!")
     st.dataframe(df)
 
-    # ➕ PLACEHOLDER: this is where the full cleaning logic must continue
-    st.info("✅ Now add the cleaning logic to generate HUB-formatted data.")
+    # BEGIN CLEANING LOGIC
+    df.columns = [col.strip().lower().replace(" ", "").replace("-", "") for col in df.columns]
+    cleaned_df = pd.DataFrame(columns=FINAL_COLUMNS)
+
+    for col in df.columns:
+        for key, aliases in FIELD_ALIASES.items():
+            if col in aliases:
+                if key == "first_name":
+                    cleaned_df["Full Name"] = df[col] if "Full Name" not in cleaned_df else cleaned_df["Full Name"]
+                elif key == "last_name":
+                    if "Full Name" in cleaned_df:
+                        cleaned_df["Full Name"] = cleaned_df["Full Name"] + " " + df[col].astype(str)
+                elif key == "dob":
+                    dob_series = pd.to_datetime(df[col], errors='coerce')
+                    old_dates = dob_series[dob_series.dt.year < datetime.now().year - 18]
+                    if len(old_dates) > 0:
+                        cleaned_df["DOB"] = df[col]
+                elif key == "revenue":
+                    cleaned_df["Monthly Revenue"] = df[col]
+                elif key == "ein":
+                    cleaned_df["EIN"] = df[col]
+                elif key == "ssn":
+                    cleaned_df["SSN"] = df[col]
+                elif key == "industry":
+                    cleaned_df["Industry"] = df[col]
+                elif key == "business_name":
+                    if df[col].astype(str).str.contains(r"LLC|INC|CORP|LTD|CO", case=False, na=False).sum() > 0:
+                        cleaned_df["Business Name"] = df[col]
+                elif key.startswith("phone"):
+                    phone_slot = f"Phone {key[-1]}"
+                    if phone_slot in FINAL_COLUMNS:
+                        cleaned_df[phone_slot] = df[col]
+                elif key.startswith("email"):
+                    email_slot = f"Email {key[-1]}"
+                    if email_slot in FINAL_COLUMNS:
+                        cleaned_df[email_slot] = df[col]
+                elif key == "address":
+                    if "Business Address" not in cleaned_df or cleaned_df["Business Address"].isnull().all():
+                        cleaned_df["Business Address"] = df[col]
+                    else:
+                        cleaned_df["Home Address"] = df[col]
+
+    st.subheader("Cleaned CSV (Full Preview)")
+    st.dataframe(cleaned_df)
+
+    st.subheader("Original Uploaded CSV")
+    st.dataframe(df)
+
+    cleaned_filename = uploaded_file.name.rsplit('.', 1)[0] + '_cleaned.csv'
+    cleaned_df.to_csv(cleaned_filename, index=False)
+    with open(cleaned_filename, 'rb') as f:
+        st.download_button("Download Cleaned CSV", f, file_name=cleaned_filename)
 else:
     st.info("Awaiting file upload...")
