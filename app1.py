@@ -86,6 +86,13 @@ if uploaded_file is not None:
                         break
                 except:
                     continue
+            # Manual parse fallback for one-column issue
+            if df is not None and len(df.columns) == 1:
+                content = uploaded_file.read().decode(errors='ignore')
+                lines = content.strip().split('\n')
+                split_lines = [line.split(',') for line in lines]
+                df = pd.DataFrame(split_lines[1:], columns=split_lines[0])
+
         elif uploaded_file.name.endswith('.xlsx'):
             try:
                 import openpyxl
