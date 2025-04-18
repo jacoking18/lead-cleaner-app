@@ -174,7 +174,7 @@ if uploaded_file is not None:
             st.download_button("Download Cleaned CSV", f, file_name=cleaned_filename)
 
         st.markdown("### 📋 Copy Cleaned Data to Clipboard")
-        cleaned_no_header = cleaned_df.to_csv(index=False, header=False)
+        cleaned_no_header = cleaned_df.to_csv(index=False, header=False).strip()
         st.text_area("Copy below:", value=cleaned_no_header, height=200)
         st.code("Press Ctrl+C (Cmd+C on Mac) to copy the data above")
 else:
