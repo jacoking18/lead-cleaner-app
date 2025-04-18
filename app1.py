@@ -156,6 +156,8 @@ if uploaded_file is not None:
             selected_cols = st.session_state.mappings.get(hub_col, [])
             if selected_cols:
                 combined = df[selected_cols].astype(str).apply(lambda row: ' '.join(row.dropna().astype(str)).strip(), axis=1)
+                if "phone" in hub_col.lower():
+                    combined = combined.str.replace(r'\.0$', '', regex=True)
                 cleaned_df[hub_col] = combined.replace("nan", "", regex=False).replace("None", "", regex=False)
                 log_user_mapping(uploaded_file.name, hub_col, selected_cols)
             else:
