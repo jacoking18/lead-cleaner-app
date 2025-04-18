@@ -1,3 +1,5 @@
+# CODE STARTS HERE — CAPNOW DATA CLEANER
+
 import streamlit as st
 import pandas as pd
 import re
@@ -25,7 +27,6 @@ def check_password():
 
 if not check_password():
     st.stop()
-# -------------------------------------------------------------
 
 st.set_page_config(page_title="CAPNOW DATA CLEANER APP")
 st.title("CAPNOW DATA CLEANER APP")
@@ -33,13 +34,9 @@ st.markdown("**Creator: Jaco Simkin – Director of Data Analysis**")
 
 st.markdown("""
 This app cleans raw CSV or Excel files received from lead providers and outputs a standardized file ready for the CAPNOW HUB.
-
-It lets you visually assign uploaded columns into HUB fields — and allows combining multiple source columns per HUB column.
-
 - Assign multiple source columns to each HUB field to merge them (e.g. address parts).
 - Keeps all HUB columns even if left unmapped.
 - Logs mappings to improve smart predictions in the future.
-- Suggests column mappings based on historical user behavior with confidence visualization.
 - Download the cleaned result once mapping is done.
 """)
 
@@ -56,7 +53,6 @@ if st.button("🔄 Clear Mappings"):
     st.session_state.mappings = {}
     st.rerun()
 
-# 📦 Store training log
 def log_user_mapping(filename, field, selected_cols):
     if not selected_cols:
         return
@@ -65,7 +61,6 @@ def log_user_mapping(filename, field, selected_cols):
         for col in selected_cols:
             log.write(f"{filename},{col},\"{sample_values}\",{field}\n")
 
-# 🧠 Suggest mappings from past logs with confidence
 def get_suggested_columns_with_confidence(field):
     if not os.path.exists("mappings_log.csv"):
         return []
@@ -87,15 +82,12 @@ if uploaded_file is not None:
         if uploaded_file.name.endswith('.csv'):
             content = uploaded_file.read().decode(errors='ignore')
             lines = content.strip().split('\n')
-
             header_candidates = [line.split(',') for line in lines[:5] if len(line.split(',')) > 3]
             header_row_index = 0
-
             for i, row in enumerate(header_candidates):
                 if any(cell.strip().lower() in ['phone1', 'firstname', 'lastname', 'email'] for cell in row):
                     header_row_index = i
                     break
-
             from io import StringIO
             df = pd.read_csv(StringIO(content), skiprows=header_row_index)
 
@@ -115,7 +107,7 @@ if uploaded_file is not None:
             st.stop()
 
         if df is None or df.empty or len(df.columns) <= 1:
-            st.error("The file appears to be empty or not properly formatted. Please make sure it has column headers and data rows.")
+            st.error("The file appears to be empty or not properly formatted.")
             st.stop()
 
     except Exception as e:
@@ -128,18 +120,26 @@ if uploaded_file is not None:
 
     st.markdown("### 👉 Map Your Columns to HUB Fields")
     all_headers = list(df.columns)
-
-    used_columns = set()
+    current_selections = {}
     cols_left, cols_right = st.columns(2)
+
     for i, field in enumerate(FINAL_COLUMNS):
         col = cols_left if i % 2 == 0 else cols_right
         with col:
             st.markdown(f"<div style='font-weight:bold; font-size:16px; margin-bottom:4px'>{field}</div>", unsafe_allow_html=True)
-            current_selection = st.session_state.mappings.get(field, [])
-            available_options = [h for h in all_headers if h not in used_columns or h in current_selection]
-            selected = st.multiselect("", options=available_options, default=current_selection, key=field)
-            st.session_state.mappings[field] = selected
-            used_columns.update(selected)
+            selected = st.multiselect(
+                label="",
+                options=all_headers,
+                default=st.session_state.mappings.get(field, []),
+                key=field
+            )
+            current_selections[field] = selected
+
+    st.session_state.mappings = current_selections
+
+    used_columns = set()
+    for val in st.session_state.mappings.values():
+        used_columns.update(val)
 
     st.markdown("---")
 
