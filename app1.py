@@ -1,5 +1,3 @@
-# CODE STARTS HERE — CAPNOW DATA CLEANER
-
 import streamlit as st
 import pandas as pd
 import re
@@ -28,12 +26,14 @@ def check_password():
 if not check_password():
     st.stop()
 
+# -------------------- PAGE SETUP --------------------
 st.set_page_config(page_title="CAPNOW DATA CLEANER APP")
 st.title("CAPNOW DATA CLEANER APP")
 st.markdown("**Creator: Jaco Simkin – Director of Data Analysis**")
 
 st.markdown("""
 This app cleans raw CSV or Excel files received from lead providers and outputs a standardized file ready for the CAPNOW HUB.
+
 - Assign multiple source columns to each HUB field to merge them (e.g. address parts).
 - Keeps all HUB columns even if left unmapped.
 - Logs mappings to improve smart predictions in the future.
@@ -53,6 +53,7 @@ if st.button("🔄 Clear Mappings"):
     st.session_state.mappings = {}
     st.rerun()
 
+# -------------------- LOG MAPPINGS --------------------
 def log_user_mapping(filename, field, selected_cols):
     if not selected_cols:
         return
@@ -61,6 +62,7 @@ def log_user_mapping(filename, field, selected_cols):
         for col in selected_cols:
             log.write(f"{filename},{col},\"{sample_values}\",{field}\n")
 
+# -------------------- SUGGESTIONS --------------------
 def get_suggested_columns_with_confidence(field):
     if not os.path.exists("mappings_log.csv"):
         return []
@@ -74,6 +76,7 @@ def get_suggested_columns_with_confidence(field):
     except:
         return []
 
+# -------------------- FILE UPLOAD --------------------
 uploaded_file = st.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx"], on_change=lambda: st.session_state.update({'mappings': {}}))
 
 df = None
@@ -114,35 +117,35 @@ if uploaded_file is not None:
         st.error(f"Error while reading the file: {e}")
         st.stop()
 
+    # -------------------- CSV MAPPED PREVIEW --------------------
     st.success("File uploaded successfully!")
     st.subheader("Original Uploaded CSV")
     st.dataframe(df)
 
     st.markdown("### 👉 Map Your Columns to HUB Fields")
     all_headers = list(df.columns)
-    current_selections = {}
-    cols_left, cols_right = st.columns(2)
 
+    current_selections = {}
+    for field in FINAL_COLUMNS:
+        current_selections[field] = st.session_state.mappings.get(field, [])
+
+    used_across_fields = set(val for vals in current_selections.values() for val in vals)
+
+    cols_left, cols_right = st.columns(2)
     for i, field in enumerate(FINAL_COLUMNS):
         col = cols_left if i % 2 == 0 else cols_right
         with col:
             st.markdown(f"<div style='font-weight:bold; font-size:16px; margin-bottom:4px'>{field}</div>", unsafe_allow_html=True)
-            selected = st.multiselect(
-                label="",
-                options=all_headers,
-                default=st.session_state.mappings.get(field, []),
-                key=field
-            )
-            current_selections[field] = selected
+            already_selected = current_selections.get(field, [])
+            available_options = [h for h in all_headers if h not in used_across_fields or h in already_selected]
+            selection = st.multiselect("", options=available_options, default=already_selected, key=field)
+            current_selections[field] = selection
 
     st.session_state.mappings = current_selections
 
-    used_columns = set()
-    for val in st.session_state.mappings.values():
-        used_columns.update(val)
-
     st.markdown("---")
 
+    # -------------------- GENERATE CLEANED VERSION --------------------
     if st.button("Generate Cleaned CSV"):
         cleaned_df = pd.DataFrame()
         for hub_col in FINAL_COLUMNS:
