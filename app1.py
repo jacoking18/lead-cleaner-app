@@ -45,14 +45,13 @@ It lets you visually assign uploaded columns into HUB fields — and allows comb
 
 FINAL_COLUMNS = [
     "Lead Date", "Business Name", "Full Name", "SSN", "DOB", "Industry", "EIN",
-    "Business Start Date", "Phone 1", "Phone 2", "Phone 3", "Email 1", "Email 2",
+    "Business Start Date", "Phone 1", "Phone 2", "Email 1", "Email 2",
     "Business Address", "Home Address", "Monthly Revenue"
 ]
 
 if 'mappings' not in st.session_state:
     st.session_state.mappings = {}
 
-# Refresh button
 if st.button("🔄 Clear Mappings"):
     st.session_state.mappings = {}
     st.rerun()
@@ -67,7 +66,6 @@ def log_user_mapping(filename, field, selected_cols):
             log.write(f"{filename},{col},\"{sample_values}\",{field}\n")
 
 # 🧠 Suggest mappings from past logs with confidence
-
 def get_suggested_columns_with_confidence(field):
     if not os.path.exists("mappings_log.csv"):
         return []
@@ -131,25 +129,24 @@ if uploaded_file is not None:
     st.markdown("### 👉 Map Your Columns to HUB Fields")
     all_headers = list(df.columns)
 
+    used_columns = set()
     cols_left, cols_right = st.columns(2)
     for i, field in enumerate(FINAL_COLUMNS):
         col = cols_left if i % 2 == 0 else cols_right
         with col:
             st.markdown(f"<div style='font-weight:bold; font-size:16px; margin-bottom:4px'>{field}</div>", unsafe_allow_html=True)
             suggestions = get_suggested_columns_with_confidence(field)
-            default_vals = [col for col, conf in suggestions if col in all_headers][:2]
+            default_vals = [col for col, conf in suggestions if col in all_headers and col not in used_columns][:2]
+            available_options = [h for h in all_headers if h not in used_columns or h in default_vals]
 
             if suggestions:
                 for col_s, conf in suggestions:
-                    if col_s in all_headers:
+                    if col_s in available_options:
                         st.progress(conf / 100, text=f"{col_s} ({conf}%)")
 
-            st.session_state.mappings[field] = st.multiselect(
-                label="",
-                options=all_headers,
-                default=default_vals,
-                key=field
-            )
+            selected = st.multiselect("", options=available_options, default=default_vals, key=field)
+            st.session_state.mappings[field] = selected
+            used_columns.update(selected)
 
     st.markdown("---")
 
@@ -175,5 +172,10 @@ if uploaded_file is not None:
         cleaned_df.to_csv(cleaned_filename, index=False)
         with open(cleaned_filename, 'rb') as f:
             st.download_button("Download Cleaned CSV", f, file_name=cleaned_filename)
+
+        st.markdown("### 📋 Copy Cleaned Data to Clipboard")
+        cleaned_no_header = cleaned_df.to_csv(index=False, header=False)
+        st.text_area("Copy below:", value=cleaned_no_header, height=200)
+        st.code("Press Ctrl+C (Cmd+C on Mac) to copy the data above")
 else:
     st.info("Awaiting file upload...")
