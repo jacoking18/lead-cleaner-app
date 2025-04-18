@@ -45,7 +45,7 @@ It lets you visually assign uploaded columns into HUB fields — and allows comb
 
 FINAL_COLUMNS = [
     "Lead Date", "Business Name", "Full Name", "SSN", "DOB", "Industry", "EIN",
-    "Business Start Date", "Phone 1", "Phone 2", "Phone 3", "Email 1", "Email 2",
+    "Business Start Date", "Phone 1", "Phone 2", "Email 1", "Email 2",
     "Business Address", "Home Address", "Monthly Revenue"
 ]
 
