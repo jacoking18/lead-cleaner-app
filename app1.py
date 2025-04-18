@@ -131,25 +131,29 @@ if uploaded_file is not None:
     st.markdown("### 👉 Map Your Columns to HUB Fields")
     all_headers = list(df.columns)
 
-    cols_left, cols_right = st.columns(2)
-    for i, field in enumerate(FINAL_COLUMNS):
-        col = cols_left if i % 2 == 0 else cols_right
-        with col:
-            st.markdown(f"<div style='font-weight:bold; font-size:16px; margin-bottom:4px'>{field}</div>", unsafe_allow_html=True)
-            suggestions = get_suggested_columns_with_confidence(field)
-            default_vals = [col for col, conf in suggestions if col in all_headers][:2]
+    used_columns = set()
+cols_left, cols_right = st.columns(2)
+for i, field in enumerate(FINAL_COLUMNS):
+    col = cols_left if i % 2 == 0 else cols_right
+    with col:
+        st.markdown(f"<div style='font-weight:bold; font-size:16px; margin-bottom:4px'>{field}</div>", unsafe_allow_html=True)
 
-            if suggestions:
-                for col_s, conf in suggestions:
-                    if col_s in all_headers:
-                        st.progress(conf / 100, text=f"{col_s} ({conf}%)")
+        # Get current selection
+        current_selection = st.session_state.mappings.get(field, [])
 
-            st.session_state.mappings[field] = st.multiselect(
-                label="",
-                options=all_headers,
-                default=default_vals,
-                key=field
-            )
+        # Allow previously selected columns + unused ones
+        available_options = [col for col in all_headers if col not in used_columns or col in current_selection]
+
+        selected = st.multiselect(
+            label="",
+            options=available_options,
+            default=current_selection,
+            key=field
+        )
+
+        st.session_state.mappings[field] = selected
+        used_columns.update(selected)
+
 
     st.markdown("---")
 
