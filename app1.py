@@ -125,23 +125,14 @@ if uploaded_file is not None:
     st.markdown("### 👉 Map Your Columns to HUB Fields")
     all_headers = list(df.columns)
 
-    current_selections = {}
-    for field in FINAL_COLUMNS:
-        current_selections[field] = st.session_state.mappings.get(field, [])
-
-    used_across_fields = set(val for vals in current_selections.values() for val in vals)
-
     cols_left, cols_right = st.columns(2)
     for i, field in enumerate(FINAL_COLUMNS):
         col = cols_left if i % 2 == 0 else cols_right
         with col:
             st.markdown(f"<div style='font-weight:bold; font-size:16px; margin-bottom:4px'>{field}</div>", unsafe_allow_html=True)
-            already_selected = current_selections.get(field, [])
-            available_options = [h for h in all_headers if h not in used_across_fields or h in already_selected]
-            selection = st.multiselect("", options=available_options, default=already_selected, key=field)
-            current_selections[field] = selection
-
-    st.session_state.mappings = current_selections
+            current_selection = st.session_state.mappings.get(field, [])
+            selected = st.multiselect("", options=all_headers, default=current_selection, key=field)
+            st.session_state.mappings[field] = selected
 
     st.markdown("---")
 
