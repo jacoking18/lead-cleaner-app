@@ -129,24 +129,25 @@ if uploaded_file is not None:
     st.markdown("### 👉 Map Your Columns to HUB Fields")
     all_headers = list(df.columns)
 
-    used_columns = set()
+    selected_so_far = {col for field in FINAL_COLUMNS for col in st.session_state.mappings.get(field, [])}
+
     cols_left, cols_right = st.columns(2)
     for i, field in enumerate(FINAL_COLUMNS):
         col = cols_left if i % 2 == 0 else cols_right
         with col:
             st.markdown(f"<div style='font-weight:bold; font-size:16px; margin-bottom:4px'>{field}</div>", unsafe_allow_html=True)
             suggestions = get_suggested_columns_with_confidence(field)
-            default_vals = [col for col, conf in suggestions if col in all_headers and col not in used_columns][:2]
-            available_options = [h for h in all_headers if h not in used_columns or h in default_vals]
+            current_selection = st.session_state.mappings.get(field, [])
+            default_vals = [col for col, conf in suggestions if col in all_headers and col not in selected_so_far] if not current_selection else current_selection
 
             if suggestions:
                 for col_s, conf in suggestions:
-                    if col_s in available_options:
+                    if col_s in all_headers:
                         st.progress(conf / 100, text=f"{col_s} ({conf}%)")
 
-            selected = st.multiselect("", options=available_options, default=default_vals, key=field)
+            available_options = list(set(all_headers) - set().union(*[set(st.session_state.mappings.get(f, [])) for f in FINAL_COLUMNS if f != field]))
+            selected = st.multiselect("", options=sorted(available_options), default=default_vals, key=field)
             st.session_state.mappings[field] = selected
-            used_columns.update(selected)
 
     st.markdown("---")
 
@@ -174,10 +175,5 @@ if uploaded_file is not None:
         cleaned_df.to_csv(cleaned_filename, index=False)
         with open(cleaned_filename, 'rb') as f:
             st.download_button("Download Cleaned CSV", f, file_name=cleaned_filename)
-
-        st.markdown("### 📋 Copy Cleaned Data to Clipboard")
-        cleaned_no_header = cleaned_df.to_csv(index=False, header=False).strip()
-        st.text_area("Copy below:", value=cleaned_no_header, height=200)
-        st.code("Press Ctrl+C (Cmd+C on Mac) to copy the data above")
 else:
     st.info("Awaiting file upload...")
