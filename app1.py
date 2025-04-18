@@ -25,8 +25,8 @@ def check_password():
 
 if not check_password():
     st.stop()
+# -------------------------------------------------------------
 
-# -------------------- PAGE SETUP --------------------
 st.set_page_config(page_title="CAPNOW DATA CLEANER APP")
 st.title("CAPNOW DATA CLEANER APP")
 st.markdown("**Creator: Jaco Simkin – Director of Data Analysis**")
@@ -34,26 +34,30 @@ st.markdown("**Creator: Jaco Simkin – Director of Data Analysis**")
 st.markdown("""
 This app cleans raw CSV or Excel files received from lead providers and outputs a standardized file ready for the CAPNOW HUB.
 
+It lets you visually assign uploaded columns into HUB fields — and allows combining multiple source columns per HUB column.
+
 - Assign multiple source columns to each HUB field to merge them (e.g. address parts).
 - Keeps all HUB columns even if left unmapped.
 - Logs mappings to improve smart predictions in the future.
+- Suggests column mappings based on historical user behavior with confidence visualization.
 - Download the cleaned result once mapping is done.
 """)
 
 FINAL_COLUMNS = [
     "Lead Date", "Business Name", "Full Name", "SSN", "DOB", "Industry", "EIN",
-    "Business Start Date", "Phone 1", "Phone 2", "Email 1", "Email 2",
+    "Business Start Date", "Phone 1", "Phone 2", "Phone 3", "Email 1", "Email 2",
     "Business Address", "Home Address", "Monthly Revenue"
 ]
 
 if 'mappings' not in st.session_state:
     st.session_state.mappings = {}
 
+# Refresh button
 if st.button("🔄 Clear Mappings"):
     st.session_state.mappings = {}
     st.rerun()
 
-# -------------------- LOG MAPPINGS --------------------
+# 📦 Store training log
 def log_user_mapping(filename, field, selected_cols):
     if not selected_cols:
         return
@@ -62,7 +66,8 @@ def log_user_mapping(filename, field, selected_cols):
         for col in selected_cols:
             log.write(f"{filename},{col},\"{sample_values}\",{field}\n")
 
-# -------------------- SUGGESTIONS --------------------
+# 🧠 Suggest mappings from past logs with confidence
+
 def get_suggested_columns_with_confidence(field):
     if not os.path.exists("mappings_log.csv"):
         return []
@@ -76,7 +81,6 @@ def get_suggested_columns_with_confidence(field):
     except:
         return []
 
-# -------------------- FILE UPLOAD --------------------
 uploaded_file = st.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx"], on_change=lambda: st.session_state.update({'mappings': {}}))
 
 df = None
@@ -85,12 +89,15 @@ if uploaded_file is not None:
         if uploaded_file.name.endswith('.csv'):
             content = uploaded_file.read().decode(errors='ignore')
             lines = content.strip().split('\n')
+
             header_candidates = [line.split(',') for line in lines[:5] if len(line.split(',')) > 3]
             header_row_index = 0
+
             for i, row in enumerate(header_candidates):
                 if any(cell.strip().lower() in ['phone1', 'firstname', 'lastname', 'email'] for cell in row):
                     header_row_index = i
                     break
+
             from io import StringIO
             df = pd.read_csv(StringIO(content), skiprows=header_row_index)
 
@@ -110,14 +117,13 @@ if uploaded_file is not None:
             st.stop()
 
         if df is None or df.empty or len(df.columns) <= 1:
-            st.error("The file appears to be empty or not properly formatted.")
+            st.error("The file appears to be empty or not properly formatted. Please make sure it has column headers and data rows.")
             st.stop()
 
     except Exception as e:
         st.error(f"Error while reading the file: {e}")
         st.stop()
 
-    # -------------------- CSV MAPPED PREVIEW --------------------
     st.success("File uploaded successfully!")
     st.subheader("Original Uploaded CSV")
     st.dataframe(df)
@@ -130,21 +136,29 @@ if uploaded_file is not None:
         col = cols_left if i % 2 == 0 else cols_right
         with col:
             st.markdown(f"<div style='font-weight:bold; font-size:16px; margin-bottom:4px'>{field}</div>", unsafe_allow_html=True)
-            current_selection = st.session_state.mappings.get(field, [])
-            selected = st.multiselect("", options=all_headers, default=current_selection, key=field)
-            st.session_state.mappings[field] = selected
+            suggestions = get_suggested_columns_with_confidence(field)
+            default_vals = [col for col, conf in suggestions if col in all_headers][:2]
+
+            if suggestions:
+                for col_s, conf in suggestions:
+                    if col_s in all_headers:
+                        st.progress(conf / 100, text=f"{col_s} ({conf}%)")
+
+            st.session_state.mappings[field] = st.multiselect(
+                label="",
+                options=all_headers,
+                default=default_vals,
+                key=field
+            )
 
     st.markdown("---")
 
-    # -------------------- GENERATE CLEANED VERSION --------------------
     if st.button("Generate Cleaned CSV"):
         cleaned_df = pd.DataFrame()
         for hub_col in FINAL_COLUMNS:
             selected_cols = st.session_state.mappings.get(hub_col, [])
             if selected_cols:
                 combined = df[selected_cols].astype(str).apply(lambda row: ' '.join(row.dropna().astype(str)).strip(), axis=1)
-                if "phone" in hub_col.lower():
-                    combined = combined.str.replace(r'\.0$', '', regex=True)
                 cleaned_df[hub_col] = combined.replace("nan", "", regex=False).replace("None", "", regex=False)
                 log_user_mapping(uploaded_file.name, hub_col, selected_cols)
             else:
