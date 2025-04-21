@@ -67,6 +67,7 @@ def log_user_mapping(filename, field, selected_cols):
             log.write(f"{filename},{col},\"{sample_values}\",{field}\n")
 
 # 🧠 Suggest mappings from past logs with confidence
+
 def get_suggested_columns_with_confidence(field):
     if not os.path.exists("mappings_log.csv"):
         return []
@@ -88,14 +89,18 @@ if uploaded_file is not None:
         if uploaded_file.name.endswith('.csv'):
             content = uploaded_file.read().decode(errors='ignore')
             lines = content.strip().split('\n')
+
             header_candidates = [line.split(',') for line in lines[:5] if len(line.split(',')) > 3]
             header_row_index = 0
+
             for i, row in enumerate(header_candidates):
                 if any(cell.strip().lower() in ['phone1', 'firstname', 'lastname', 'email'] for cell in row):
                     header_row_index = i
                     break
+
             from io import StringIO
             df = pd.read_csv(StringIO(content), skiprows=header_row_index)
+
         elif uploaded_file.name.endswith('.xlsx'):
             try:
                 import openpyxl
@@ -126,28 +131,25 @@ if uploaded_file is not None:
     st.markdown("### 👉 Map Your Columns to HUB Fields")
     all_headers = list(df.columns)
 
-    used_columns = set()
     cols_left, cols_right = st.columns(2)
     for i, field in enumerate(FINAL_COLUMNS):
         col = cols_left if i % 2 == 0 else cols_right
         with col:
             st.markdown(f"<div style='font-weight:bold; font-size:16px; margin-bottom:4px'>{field}</div>", unsafe_allow_html=True)
-
-            current_selection = st.session_state.mappings.get(field, [])
-            available_options = [col for col in all_headers if col not in used_columns or col in current_selection]
-
             suggestions = get_suggested_columns_with_confidence(field)
-            default_suggested = [col for col, _ in suggestions if col in available_options][:2]
+            default_vals = [col for col, conf in suggestions if col in all_headers][:2]
 
-            selected = st.multiselect(
+            if suggestions:
+                for col_s, conf in suggestions:
+                    if col_s in all_headers:
+                        st.progress(conf / 100, text=f"{col_s} ({conf}%)")
+
+            st.session_state.mappings[field] = st.multiselect(
                 label="",
-                options=available_options,
-                default=current_selection or default_suggested,
+                options=all_headers,
+                default=default_vals,
                 key=field
             )
-
-            st.session_state.mappings[field] = selected
-            used_columns.update(selected)
 
     st.markdown("---")
 
@@ -157,8 +159,6 @@ if uploaded_file is not None:
             selected_cols = st.session_state.mappings.get(hub_col, [])
             if selected_cols:
                 combined = df[selected_cols].astype(str).apply(lambda row: ' '.join(row.dropna().astype(str)).strip(), axis=1)
-                if "phone" in hub_col.lower():
-                    combined = combined.str.replace(r'\.0$', '', regex=True)
                 cleaned_df[hub_col] = combined.replace("nan", "", regex=False).replace("None", "", regex=False)
                 log_user_mapping(uploaded_file.name, hub_col, selected_cols)
             else:
